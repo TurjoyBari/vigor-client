@@ -1,7 +1,9 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@heroui/react";
 import { Moon, Sun } from "@gravity-ui/icons";
+import { FaThLarge, FaUser, FaSignOutAlt } from "react-icons/fa";
 import Icon from "./Icon";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -193,13 +195,27 @@ export default function Navbar() {
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center transition-transform hover:scale-105 outline-none focus:outline-none cursor-pointer"
               >
-                <Image
-                  width={20}
-                  height={20}
-                  className="w-9 h-9 rounded-full object-cover border border-pink-500 shadow-md shadow-pink-500/10"
-                  src={session?.user?.image}
-                  alt="avatar"
-                />
+                {session.user.image &&
+                !session.user.image.startsWith("blob:") &&
+                !session.user.image.startsWith("data:") ? (
+                  <Image
+                    width={36}
+                    height={36}
+                    className="w-9 h-9 rounded-full object-cover border border-pink-500 shadow-md shadow-pink-500/10"
+                    src={session.user.image}
+                    alt={session.user.name || "User avatar"}
+                  />
+                ) : session.user.image ? (
+                  <img
+                    src={session.user.image}
+                    alt={session.user.name || "User avatar"}
+                    className="w-9 h-9 rounded-full object-cover border border-pink-500 shadow-md shadow-pink-500/10"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full border border-pink-500 shadow-md shadow-pink-500/10 bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-sm">
+                    {(session.user.name || "U").charAt(0).toUpperCase()}
+                  </div>
+                )}
               </button>
 
               {dropdownOpen && (

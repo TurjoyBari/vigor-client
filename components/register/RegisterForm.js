@@ -17,6 +17,9 @@ import Icon from "@/components/Icon";
 import GoogleIcon from "../login/GoogleIcon";
 import { signUp, signIn } from "@/lib/auth-client";
 import { useForm } from "react-hook-form";
+import { toast } from "react-toastify";
+
+const VALID_ROLES = ["user", "trainer"];
 
 function FieldIcon({ icon, focused }) {
   return (
@@ -32,17 +35,23 @@ function FieldIcon({ icon, focused }) {
 
 export default function RegisterForm() {
   const router = useRouter();
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState("attendee");
-  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
   const [focusedField, setFocusedField] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [roleError, setRoleError] = useState("");
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    defaultValues: {
+      fullName: "",
+      email: "",
+      role: "",
+      password: "",
+    },
+  });
 
   const inputClassName =
     "register-input w-full bg-surface-container-low border border-primary-container/20 rounded-xl py-4 pl-12 pr-4 text-on-surface placeholder:text-outline-variant snappy-transition";
@@ -50,57 +59,64 @@ export default function RegisterForm() {
   const selectClassName =
     "register-input w-full bg-surface-container-low border border-primary-container/20 rounded-xl py-4 px-4 text-on-surface snappy-transition cursor-pointer hover:border-secondary/40 focus:border-primary-container";
 
-  // const handleSubmitForm = async (e) => {
-  //   e.preventDefault();
-  //   setError("");
-  //   setRoleError("");
+  const onInvalid = (formErrors) => {
+    const firstError = Object.values(formErrors).find((field) => field?.message);
+    toast.error(firstError?.message || "Please fix the invalid fields.");
+  };
 
-  //   if (!role) {
-  //     setRoleError("Role is required");
-  //     return;
-  //   }
+  const onSubmit = async (data) => {
+    // if (!termsAccepted) {
+    //   toast.error("Please accept the Terms of Service and Privacy Policy.");
+    //   return;
+    // }
+    if (!data.role) {
+      toast.error("Please select a role");
+      return;
+    }
 
-  //   if (!termsAccepted) {
-  //     setError("Please accept the Terms of Service and Privacy Policy.");
-  //     return;
-  //   }
+    if (!data.fullName) {
+      toast.error("Please enter your full name");
+      return;
+    }
 
-  //   setIsSubmitting(true);
+    if (!data.email) {
+      toast.error("Please enter your email");
+      return;
+    }
 
-  //   try {
-  //     const result = await signUp.email({
-  //       email,
-  //       password,
-  //       name: fullName,
-  //       role,
-  //       image: profileImage ? URL.createObjectURL(profileImage) : undefined,
-  //     });
+    if (!data.password) {
+      toast.error("Please enter your password");
+      return;
+    }
+    
+    try {
+      const result = await signUp.email({
+        email: data.email.trim(),
+        password: data.password,
+        name: data.fullName.trim(),
+        role: data.role,
+        image: profileImage ? URL.createObjectURL(profileImage) : undefined,
+      });
 
-  //     if (result.error) {
-  //       setError(result.error.message || "Registration failed. Please try again.");
-  //       return;
-  //     }
+      if (result.error) {
+        toast.error(result.error.message || "Registration failed. Please try again.");
+        return;
+      }
 
-  //     router.push("/");
-  //   } catch {
-  //     setError("Registration failed. Please try again.");
-  //   } finally {
-  //     setIsSubmitting(false);
-  //   }
-  // };
+      toast.success("Account created successfully! Welcome to VIGOR.");
+      setTimeout(() => router.push("/"), 1500);
+    } catch {
+      toast.error("Registration failed. Please try again.");
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     try {
       await signIn.social({ provider: "google", callbackURL: "/" });
     } catch {
-      setError("Google sign in is not available.");
+      toast.error("Google sign in is not available.");
     }
   };
-
-  const {register, handleSubmit , formState: {errors}} = useForm();
-  console.log(errors);
-
-  const onSubmit = (data) => console.log(data) 
 
   return (
     <section className="lg:col-span-7 auth-form-panel p-10 lg:p-20 flex flex-col justify-center">
@@ -120,7 +136,7 @@ export default function RegisterForm() {
           </p>
         </header>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
           <div className="space-y-2">
             <label
               htmlFor="fullName"
@@ -131,19 +147,37 @@ export default function RegisterForm() {
             <div className="relative">
               <FieldIcon icon={Person} focused={focusedField === "fullName"} />
               <Input
-                {...register("fullName", {required: "Full Name is required"})}
-
                 id="fullName"
                 type="text"
                 placeholder="Alex Johnson"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                onFocus={() => setFocusedField("fullName")}
-                onBlur={() => setFocusedField(null)}
-                required
                 className={inputClassName}
+                {...register("fullName", {
+                  required: "Full name is required",
+                  minLength: {
+                    value: 2,
+                    message: "Name must be at least 2 characters",
+                  },
+                  maxLength: {
+                    value: 50,
+                    message: "Name must not exceed 50 characters",
+                  },
+                  pattern: {
+                    value: /^[a-zA-Z\s'-]+$/,
+                    message:
+                      "Name can only contain letters, spaces, hyphens, and apostrophes",
+                  },
+                  validate: (value) =>
+                    value.trim().length >= 2 || "Name must be at least 2 characters",
+                  onBlur: () => setFocusedField(null),
+                })}
+                onFocus={() => setFocusedField("fullName")}
               />
             </div>
+            {errors.fullName && (
+              <p className="text-error text-sm font-hanken text-body-md">
+                {errors.fullName.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -156,18 +190,26 @@ export default function RegisterForm() {
             <div className="relative">
               <FieldIcon icon={Envelope} focused={focusedField === "email"} />
               <Input
-                {...register("email", {required: "Email is required"})}
                 id="email"
                 type="email"
                 placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onFocus={() => setFocusedField("email")}
-                onBlur={() => setFocusedField(null)}
-                required
                 className={inputClassName}
+                {...register("email", {
+                  required: "Email is required",
+                  pattern: {
+                    value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                    message: "Enter a valid email address",
+                  },
+                  onBlur: () => setFocusedField(null),
+                })}
+                onFocus={() => setFocusedField("email")}
               />
             </div>
+            {errors.email && (
+              <p className="text-error text-sm font-hanken text-body-md">
+                {errors.email.message}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2 w-full">
@@ -178,21 +220,25 @@ export default function RegisterForm() {
               Select Role
             </Label>
             <select
-              {...register("role", {required: "Role is required"})}
               id="role"
-              value={role}
-              onChange={(e) => {
-                setRole(e.target.value);
-                setRoleError("");
-              }}
               className={selectClassName}
-              required
+              {...register("role", {
+                required: "Please select a role",
+                validate: (value) =>
+                  VALID_ROLES.includes(value) ||
+                  "Please select a valid role (User or Trainer)",
+              })}
             >
-              <option  value="user">User</option>
+              <option value="" disabled>
+                Select a role
+              </option>
+              <option value="user">User</option>
               <option value="trainer">Trainer</option>
             </select>
-            {roleError && (
-              <p className="text-error text-sm font-hanken text-body-md">{roleError}</p>
+            {errors.role && (
+              <p className="text-error text-sm font-hanken text-body-md">
+                {errors.role.message}
+              </p>
             )}
           </div>
 
@@ -234,12 +280,22 @@ export default function RegisterForm() {
                 id="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onFocus={() => setFocusedField("password")}
-                onBlur={() => setFocusedField(null)}
-                required
                 className={`${inputClassName} pr-12`}
+                {...register("password", {
+                  required: "Password is required",
+                  minLength: {
+                    value: 8,
+                    message: "Password must be at least 8 characters",
+                  },
+                  pattern: {
+                    value:
+                      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]+$/,
+                    message:
+                      "Password must include uppercase, lowercase, number, and special character (@$!%*?&#)",
+                  },
+                  onBlur: () => setFocusedField(null),
+                })}
+                onFocus={() => setFocusedField("password")}
               />
               <button
                 type="button"
@@ -250,35 +306,14 @@ export default function RegisterForm() {
                 <Icon icon={showPassword ? EyeSlash : Eye} size={20} />
               </button>
             </div>
+            {errors.password && (
+              <p className="text-error text-sm font-hanken text-body-md">
+                {errors.password.message}
+              </p>
+            )}
           </div>
 
-          <Checkbox
-            isSelected={termsAccepted}
-            onChange={setTermsAccepted}
-            className="flex items-start gap-3 py-2"
-          >
-            <span className="font-geist-label text-label-sm text-on-surface-variant leading-relaxed">
-              By creating an account you agree to our{" "}
-              <Link
-                href="#"
-                className="text-on-surface hover:text-secondary hover:underline"
-              >
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link
-                href="#"
-                className="text-on-surface hover:text-secondary hover:underline"
-              >
-                Privacy Policy
-              </Link>
-              .
-            </span>
-          </Checkbox>
-
-          {error && (
-            <p className="text-error text-sm font-hanken text-body-md">{error}</p>
-          )}
+          {/*           */}
 
           <Button
             type="submit"
