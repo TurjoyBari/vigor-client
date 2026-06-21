@@ -9,14 +9,16 @@ import { Envelope, Lock, Eye, EyeSlash, ArrowRight } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import GoogleIcon from "./GoogleIcon";
 import { signIn } from "@/lib/auth-client";
+import { toast } from "react-toastify";
+import { useForm } from "react-hook-form";
 
 const LOGO_IMAGE =
   "https://lh3.googleusercontent.com/aida/AP1WRLsa8lsZMsP7-3wJ5w20PwFIaHHIGF2OFs-itquo_S9XLclfKE7rP9-4b1t4-4IiW4PAETKHAWi-L-9YpWO9vQATetII1uuQV6wXmj5TEoerRpse8iIhcoxdy2WUX7adf_gnp93q_E9AwwN08gweI5gaOauskdSmIPSf9W9c_W9btdUOsO2iC-GgrL2RyZ6kl_Rl5hmpQLgGUHotz4t0HowIGQ1rq7n7ay38ofK5vQnAHLUzseNu7qoj2A";
 
 const DEMO_ACCOUNTS = {
-  Admin: { email: "admin@vigor.com", password: "admin123" },
-  Trainer: { email: "trainer@vigor.com", password: "trainer123" },
-  User: { email: "user@vigor.com", password: "user123" },
+  Admin: { email: "admin@vigor.com", password: "admin@123" },
+  Trainer: { email: "trainer@vigor.com", password: "trainer@123" },
+  User: { email: "user@vigor.com", password: "user@123" },
 };
 
 function FieldIcon({ icon, focused }) {
@@ -33,49 +35,118 @@ function FieldIcon({ icon, focused }) {
 
 export default function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
+
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
 
   const inputClassName =
     "login-input w-full bg-surface-container-low border border-primary-container/20 rounded-xl py-4 pl-12 text-on-surface placeholder:text-outline snappy-transition";
 
-  const handleDemoLogin = (role) => {
+  const handleDemoLogin = async (role) => {
     const account = DEMO_ACCOUNTS[role];
-    setEmail(account.email);
-    setPassword(account.password);
-    setError("");
+    try {
+      const result = await signIn.email({
+      email: account.email.trim(),
+      password: account.password,
+    });
+    if (result.error) {
+      toast.error(result.error.message || "Sign in failed. Please try again.");
+      return;
+    }
+    toast.success("Sign in successfully! Welcome to VIGOR.");
+    setTimeout(() => router.push("/"), 1500);
+    } catch {
+      toast.error("Sign in failed. Please try again.");
+    }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setIsSubmitting(true);
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+  //   setError("");
+  //   setIsSubmitting(true);
+
+  //   try {
+  //     const result = await signIn.email({ email, password });
+
+  //     if (result.error) {
+  //       setError(result.error.message || "Sign in failed. Please try again.");
+  //       return;
+  //     }
+
+  //     router.push("/");
+  //   } catch {
+  //     setError("Sign in failed. Please try again.");
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
+
+  const onSubmit = async (data) => {
+    // if (!termsAccepted) {
+    //   toast.error("Please accept the Terms of Service and Privacy Policy.");
+    //   return;
+    // }
+    // if (!data.role) {
+    //   toast.error("Please select a role");
+    //   return;
+    // }
+
+    // if (!data.fullName) {
+    //   toast.error("Please enter your full name");
+    //   return;
+    // }
+
+    if (!data.email) {
+      toast.error("Please enter your email");
+      return;
+    }
+
+    if (!data.password) {
+      toast.error("Please enter your password");
+      return;
+    }
+
+
+
 
     try {
-      const result = await signIn.email({ email, password });
+      const result = await signIn.email({
+        email: data.email.trim(),
+        password: data.password
+      });
+
 
       if (result.error) {
-        setError(result.error.message || "Sign in failed. Please try again.");
+        toast.error(result.error.message || "Sign in failed. Please try again.");
         return;
       }
 
-      router.push("/");
+      toast.success("Sign in successfully! Welcome to VIGOR.");
+      setTimeout(() => router.push("/"), 1500);
     } catch {
-      setError("Sign in failed. Please try again.");
-    } finally {
-      setIsSubmitting(false);
+      toast.error("Sign in failed. Please try again.");
     }
   };
+
+
+
 
   const handleGoogleSignIn = async () => {
     try {
       await signIn.social({ provider: "google", callbackURL: "/" });
     } catch {
-      setError("Google sign in is not available.");
+      toast.error("Google sign in is not available.");
     }
   };
 
@@ -123,28 +194,31 @@ export default function LoginForm() {
         </div>
       </div>
 
-      <form className="space-y-6" onSubmit={handleSubmit}>
+      <form className="space-y-6" onSubmit={handleSubmit(onSubmit) || handleDemoLogin(role)}>
         <div>
-          <label
-            htmlFor="email"
-            className="font-geist-label text-label-bold text-on-surface mb-2 block"
-          >
-            Email address
-          </label>
           <div className="relative group">
             <FieldIcon icon={Envelope} focused={focusedField === "email"} />
             <Input
               id="email"
               type="email"
               placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onFocus={() => setFocusedField("email")}
-              onBlur={() => setFocusedField(null)}
-              required
               className={`${inputClassName} pr-4`}
+              {...register("email", {
+                required: "Email is required",
+                pattern: {
+                  value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                  message: "Enter a valid email address",
+                },
+                onBlur: () => setFocusedField(null),
+              })}
+              onFocus={() => setFocusedField("email")}
             />
           </div>
+          {errors.email && (
+            <p className="text-error text-sm font-hanken text-body-md">
+              {errors.email.message}
+            </p>
+          )}
         </div>
 
         <div>
@@ -165,14 +239,12 @@ export default function LoginForm() {
           <div className="relative group">
             <FieldIcon icon={Lock} focused={focusedField === "password"} />
             <Input
+              {...register("password", {
+                required: "Password is required",
+              })}
               id="password"
               type={showPassword ? "text" : "password"}
               placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onFocus={() => setFocusedField("password")}
-              onBlur={() => setFocusedField(null)}
-              required
               className={`${inputClassName} pr-12`}
             />
             <button
@@ -186,8 +258,10 @@ export default function LoginForm() {
           </div>
         </div>
 
-        {error && (
-          <p className="text-error text-sm font-hanken text-body-md">{error}</p>
+        {errors.password && (
+          <p className="text-error text-sm font-hanken text-body-md">
+            {errors.password.message}
+          </p>
         )}
 
         <Button

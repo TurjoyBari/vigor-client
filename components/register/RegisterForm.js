@@ -18,6 +18,7 @@ import GoogleIcon from "../login/GoogleIcon";
 import { signUp, signIn } from "@/lib/auth-client";
 import { useForm } from "react-hook-form";
 import { toast } from "react-toastify";
+import { uploadImage } from "@/utils/uploadImage";
 
 const VALID_ROLES = ["user", "trainer"];
 
@@ -88,15 +89,21 @@ export default function RegisterForm() {
       toast.error("Please enter your password");
       return;
     }
-    
+
+
+    const imageFile = data.image[0];
+        const imageUrl = await uploadImage(imageFile)
+        // console.log(imageUrl);
+
     try {
       const result = await signUp.email({
         email: data.email.trim(),
         password: data.password,
         name: data.fullName.trim(),
         role: data.role,
-        image: profileImage ? URL.createObjectURL(profileImage) : undefined,
+        image: imageUrl || undefined,
       });
+
 
       if (result.error) {
         toast.error(result.error.message || "Registration failed. Please try again.");
@@ -249,6 +256,11 @@ export default function RegisterForm() {
             </label>
             <div className="group relative cursor-pointer">
               <input
+                {...register("image", {
+                  required: "Profile image is required",
+                })}
+                id="image"
+                name="image"                
                 type="file"
                 accept="image/*"
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"

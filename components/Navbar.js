@@ -130,7 +130,7 @@ export default function Navbar() {
           {session && session?.user && (
             <Link
               href={`/dashboard/${session?.user?.role}`}
-              className={`text-sm font-medium transition-colors ${pathname.startsWith("/dashboard") ? "text-pink-500 font-semibold" : "text-slate-300 hover:text-white"}`}
+              className={`font-anybody text-label-bold uppercase tracking-[0.2em] transition-colors ${pathname.startsWith("/dashboard") ? "text-pink-500 font-semibold" : "text-slate-300 hover:text-white"}`}
             >
               Dashboard
             </Link>
