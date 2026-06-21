@@ -1,9 +1,8 @@
 import { Anybody, Hanken_Grotesk } from "next/font/google";
 import { Geist } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import ToastProvider from "@/components/ToastProvider";
+import ConditionalSiteLayout from "@/components/ConditionalSiteLayout";
 
 const anybody = Anybody({
   variable: "--font-anybody-family",
@@ -36,9 +35,7 @@ export default function RootLayout({ children }) {
       suppressHydrationWarning
     >
       <body className="selection:bg-primary-container selection:text-on-primary-container">
-        <Navbar />
-        {children}
-        <Footer />
+        <ConditionalSiteLayout>{children}</ConditionalSiteLayout>
         <ToastProvider />
       </body>
     </html>

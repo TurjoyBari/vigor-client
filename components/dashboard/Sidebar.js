@@ -117,9 +117,9 @@ export default function Sidebar({
 
           {!collapsed && (
             <div className="min-w-0">
-              <p className="font-anybody text-lg font-black italic text-primary uppercase tracking-tight">
-                VIGOR
-              </p>
+              <Link href="/"  className="font-anybody text-lg font-black italic text-primary uppercase tracking-tight">
+                <span  >VIGOR</span>
+              </Link>
               <p className="font-hanken text-[11px] text-on-surface-variant truncate">
                 {ROLE_LABELS[role]} Dashboard
               </p>

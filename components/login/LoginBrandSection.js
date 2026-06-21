@@ -2,9 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Cup, Pulse, Persons } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
-
-const LOGIN_BG_IMAGE =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuD1zU5C8edv4myHmq_UyvxVwCQaiPCJKVdPFCUoPKwKomMvyBCubvzqDqA5AvdOjgX_oQzlSH-lnQqJ3ypclxuhlrd82rp5_CZNemuwT7CPKfHVx9DT5USOxry9oYHq6HNUISbJHTeSwyO0SjNkyy79VjqF26_SUpzbDKHaQ2LYslgb7Al_zabP9cYeb-YJYw0GLe1XJo2QsFDFK8R90vsbPqxH4tBqxh1EknsFVHBWd44BduTWjqG0GuGdQvi954yEhIT-qmBiMcg";
+import { HERO_IMAGE } from "@/lib/constants/images";
 
 const LOGO_IMAGE =
   "https://lh3.googleusercontent.com/aida/AP1WRLsa8lsZMsP7-3wJ5w20PwFIaHHIGF2OFs-itquo_S9XLclfKE7rP9-4b1t4-4IiW4PAETKHAWi-L-9YpWO9vQATetII1uuQV6wXmj5TEoerRpse8iIhcoxdy2WUX7adf_gnp93q_E9AwwN08gweI5gaOauskdSmIPSf9W9c_W9btdUOsO2iC-GgrL2RyZ6kl_Rl5hmpQLgGUHotz4t0HowIGQ1rq7n7ay38ofK5vQnAHLUzseNu7qoj2A";
@@ -20,10 +18,10 @@ export default function LoginBrandSection() {
     <div className="relative hidden md:flex flex-col justify-between p-12 overflow-hidden">
       <div className="absolute inset-0 z-0">
         <Image
-          src={LOGIN_BG_IMAGE}
-          alt="Athlete performing a heavy deadlift in a premium gym"
+          src={HERO_IMAGE}
+          alt="Athlete performing pull-ups showing muscular strength"
           fill
-          className="object-cover scale-105"
+          className="object-cover object-top contrast-[1.05] saturate-[1.1]"
           priority
           sizes="50vw"
         />

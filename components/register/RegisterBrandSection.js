@@ -2,9 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Grip, Pulse, Comment } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
-
-const HERO_IMAGE =
-  "https://lh3.googleusercontent.com/aida/AP1WRLtCJNd7GGrZLAAM1Rl2NJf6X5sYijONIH94EItgwomRJU0NZhimF3Ghp-uURYwM7c0TMXr5543_WnhEAxKBzZDDwPN9AzkDL4Om-n1mHl5gB4w3diT_1yZiKZuoovGaOQo1pBQg2mnQCe9eJTGAsu9WwliavpvJl6rVISYTQhDrnU5TXTLeLjI4d9R04s0195ky9wMIA-LYNrq63370ug59nC-smrdSYMwvYsKw89BNFb12HXRJdUkC8_0";
+import { HERO_IMAGE } from "@/lib/constants/images";
 
 const LOGO_IMAGE =
   "https://lh3.googleusercontent.com/aida/AP1WRLsa8lsZMsP7-3wJ5w20PwFIaHHIGF2OFs-itquo_S9XLclfKE7rP9-4b1t4-4IiW4PAETKHAWi-L-9YpWO9vQATetII1uuQV6wXmj5TEoerRpse8iIhcoxdy2WUX7adf_gnp93q_E9AwwN08gweI5gaOauskdSmIPSf9W9c_W9btdUOsO2iC-GgrL2RyZ6kl_Rl5hmpQLgGUHotz4t0HowIGQ1rq7n7ay38ofK5vQnAHLUzseNu7qoj2A";
@@ -23,7 +21,7 @@ export default function RegisterBrandSection() {
           src={HERO_IMAGE}
           alt="Athlete focus background"
           fill
-          className="object-cover grayscale-[0.2]"
+          className="object-cover object-top contrast-[1.05] saturate-[1.1] grayscale-[0.1]"
           priority
           sizes="(max-width: 1024px) 100vw, 42vw"
         />

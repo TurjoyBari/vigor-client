@@ -21,7 +21,7 @@ export default function DashboardLayout({ children }) {
   return (
     <RoleGuard>
       {/* Full-viewport shell — sits above marketing Navbar/Footer */}
-      <div className={cn(dashboardClasses.shell, "fixed inset-0 z-[100]")}>
+      <div className={cn(dashboardClasses.shell, "fixed inset-0 z-[60]")}>
         {isPending ? (
           <div className="flex-1 p-6 lg:p-8">
             <LoadingSkeleton variant="page" />
