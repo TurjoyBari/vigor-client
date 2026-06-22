@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { motion } from "framer-motion";
 import Icon from "@/components/Icon";
 import { ChartLine } from "@gravity-ui/icons";
@@ -11,152 +12,210 @@ import {
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-function BarChart({ data = [], height = 220 }) {
-  const maxValue = Math.max(...data.map((item) => item.value), 1);
-  const barWidth = 100 / Math.max(data.length, 1);
+function formatChartValue(value) {
+  const num = Number(value);
+  if (Number.isNaN(num)) return value;
+  if (num >= 1000) return `${(num / 1000).toFixed(num >= 10000 ? 0 : 1)}k`;
+  return String(num);
+}
+
+function getAccentColor(accent) {
+  if (accent === "primary") return CHART_COLORS.primary;
+  if (accent === "accent") return CHART_COLORS.accent;
+  return CHART_COLORS.secondary;
+}
+
+function BarChart({ data = [], height = 220, accent = "secondary" }) {
+  const maxValue = Math.max(...data.map((item) => Number(item.value) || 0), 1);
+  const defaultColor = getAccentColor(accent);
 
   return (
-    <div className="w-full" style={{ height }}>
-      <svg
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        className="h-full w-full overflow-visible"
+    <div className="w-full">
+      <div
+        className="relative flex items-end justify-between gap-1.5 sm:gap-2 border-b border-primary-container/15 pb-3"
+        style={{ height }}
         role="img"
         aria-label="Bar chart"
       >
+        {[0.25, 0.5, 0.75].map((ratio) => (
+          <div
+            key={ratio}
+            className="pointer-events-none absolute inset-x-0 border-t border-dashed border-primary-container/10"
+            style={{ bottom: `${ratio * 100}%` }}
+          />
+        ))}
+
         {data.map((item, index) => {
-          const barHeight = (item.value / maxValue) * 78;
-          const x = index * barWidth + barWidth * 0.18;
-          const width = barWidth * 0.64;
-          const y = 88 - barHeight;
+          const value = Number(item.value) || 0;
+          const pct = Math.max((value / maxValue) * 100, 4);
+          const color = item.color || defaultColor;
 
           return (
-            <g key={item.label || index}>
-              <motion.rect
-                x={x}
-                y={88}
-                width={width}
-                height={0}
-                rx={1.5}
-                fill={item.color || CHART_COLORS.primary}
-                fillOpacity={0.85}
-                animate={{ height: barHeight, y }}
-                transition={{ duration: 0.6, delay: index * 0.06, ease: "easeOut" }}
+            <div
+              key={item.label || index}
+              className="relative z-10 flex h-full flex-1 flex-col items-center justify-end min-w-0 gap-2"
+            >
+              <span className="font-geist-label text-[10px] sm:text-xs font-semibold text-white tabular-nums">
+                {formatChartValue(value)}
+              </span>
+              <motion.div
+                className="w-full max-w-[44px] mx-auto rounded-t-md"
+                style={{
+                  backgroundColor: color,
+                  boxShadow: `0 0 18px ${color}55`,
+                }}
+                initial={{ height: 0 }}
+                animate={{ height: `${pct}%` }}
+                transition={{ duration: 0.55, delay: index * 0.06, ease: "easeOut" }}
               />
-            </g>
+            </div>
           );
         })}
+      </div>
 
-        <line
-          x1="0"
-          y1="88"
-          x2="100"
-          y2="88"
-          stroke={CHART_COLORS.grid}
-          strokeWidth="0.4"
-        />
-      </svg>
-
-      <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
+      <div
+        className="mt-3 grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}
+      >
         {data.map((item, index) => (
-          <div key={item.label || index} className="text-center min-w-0">
-            <p className="font-hanken text-[11px] text-on-surface-variant truncate">
-              {item.label}
-            </p>
-            <p className="font-geist-label text-xs font-semibold text-white mt-0.5">
-              {item.value}
-            </p>
-          </div>
+          <p
+            key={item.label || index}
+            className="font-hanken text-[11px] text-on-surface-variant text-center truncate"
+          >
+            {item.label}
+          </p>
         ))}
       </div>
     </div>
   );
 }
 
-function LineChart({ data = [], height = 220 }) {
-  if (!data.length) return null;
+function LineChart({ data = [], height = 220, accent = "secondary" }) {
+  const gradientId = useId().replace(/:/g, "");
+  const maxValue = Math.max(...data.map((item) => Number(item.value) || 0), 1);
+  const strokeColor = getAccentColor(accent);
 
-  const maxValue = Math.max(...data.map((item) => item.value), 1);
+  const chartWidth = 640;
+  const chartHeight = height - 36;
+  const padX = 20;
+  const padY = 18;
+  const innerW = chartWidth - padX * 2;
+  const innerH = chartHeight - padY * 2;
+
   const points = data.map((item, index) => {
-    const x = (index / Math.max(data.length - 1, 1)) * 100;
-    const y = 88 - (item.value / maxValue) * 78;
-    return `${x},${y}`;
+    const value = Number(item.value) || 0;
+    const x =
+      data.length === 1
+        ? chartWidth / 2
+        : padX + (index / (data.length - 1)) * innerW;
+    const y = padY + (1 - value / maxValue) * innerH;
+    return { x, y, value, label: item.label };
   });
 
-  const areaPoints = `0,88 ${points.join(" ")} 100,88`;
-  const polylinePoints = points.join(" ");
+  const linePath = points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+    .join(" ");
+
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${chartHeight - 8} L ${points[0].x} ${chartHeight - 8} Z`;
 
   return (
-    <div className="w-full" style={{ height }}>
+    <div className="w-full">
       <svg
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        className="h-full w-full overflow-visible"
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+        width="100%"
+        height={chartHeight}
+        preserveAspectRatio="xMidYMid meet"
+        className="overflow-visible"
         role="img"
         aria-label="Line chart"
       >
         <defs>
-          <linearGradient id="analyticsLineGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={CHART_COLORS.secondary} stopOpacity="0.35" />
-            <stop offset="100%" stopColor={CHART_COLORS.secondary} stopOpacity="0" />
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={strokeColor} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={strokeColor} stopOpacity="0" />
           </linearGradient>
         </defs>
 
-        {[22, 44, 66].map((y) => (
-          <line
-            key={y}
-            x1="0"
-            y1={y}
-            x2="100"
-            y2={y}
-            stroke={CHART_COLORS.grid}
-            strokeWidth="0.35"
-          />
-        ))}
+        {[0.25, 0.5, 0.75].map((ratio) => {
+          const y = padY + ratio * innerH;
+          return (
+            <line
+              key={ratio}
+              x1={padX}
+              y1={y}
+              x2={chartWidth - padX}
+              y2={y}
+              stroke={CHART_COLORS.grid}
+              strokeWidth="1"
+              strokeDasharray="4 6"
+            />
+          );
+        })}
 
-        <motion.polygon
-          points={areaPoints}
-          fill="url(#analyticsLineGradient)"
+        <line
+          x1={padX}
+          y1={chartHeight - 8}
+          x2={chartWidth - padX}
+          y2={chartHeight - 8}
+          stroke={CHART_COLORS.grid}
+          strokeWidth="1"
+        />
+
+        <motion.path
+          d={areaPath}
+          fill={`url(#${gradientId})`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
         />
 
-        <motion.polyline
-          points={polylinePoints}
+        <motion.path
+          d={linePath}
           fill="none"
-          stroke={CHART_COLORS.secondary}
-          strokeWidth="1.5"
+          stroke={strokeColor}
+          strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
           initial={{ pathLength: 0, opacity: 0 }}
           animate={{ pathLength: 1, opacity: 1 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
+          transition={{ duration: 0.85, ease: "easeOut" }}
         />
 
-        {data.map((item, index) => {
-          const x = (index / Math.max(data.length - 1, 1)) * 100;
-          const y = 88 - (item.value / maxValue) * 78;
-          return (
+        {points.map((point, index) => (
+          <g key={point.label || index}>
             <motion.circle
-              key={item.label || index}
-              cx={x}
-              cy={y}
-              r="1.8"
-              fill={CHART_COLORS.secondary}
+              cx={point.x}
+              cy={point.y}
+              r="6"
+              fill={strokeColor}
+              fillOpacity="0.2"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.15 + index * 0.08 }}
+            />
+            <motion.circle
+              cx={point.x}
+              cy={point.y}
+              r="4"
+              fill="#0B1120"
+              stroke={strokeColor}
+              strokeWidth="2.5"
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.2 + index * 0.08 }}
             />
-          );
-        })}
+          </g>
+        ))}
       </svg>
 
-      <div className="mt-3 flex items-center justify-between gap-2">
+      <div className="mt-3 flex items-start justify-between gap-2">
         {data.map((item, index) => (
-          <div key={item.label || index} className="text-center flex-1 min-w-0">
+          <div key={item.label || index} className="flex-1 min-w-0 text-center">
             <p className="font-hanken text-[11px] text-on-surface-variant truncate">
               {item.label}
+            </p>
+            <p className="font-geist-label text-xs font-semibold text-white mt-0.5 tabular-nums">
+              {formatChartValue(item.value)}
             </p>
           </div>
         ))}
@@ -239,9 +298,9 @@ export default function AnalyticsCard({
 
       {data.length ? (
         type === "line" ? (
-          <LineChart data={data} height={height} />
+          <LineChart data={data} height={height} accent={accent} />
         ) : (
-          <BarChart data={data} height={height} />
+          <BarChart data={data} height={height} accent={accent} />
         )
       ) : (
         <div className="flex h-[220px] items-center justify-center rounded-xl border border-dashed border-primary-container/20 bg-primary-container/5">
