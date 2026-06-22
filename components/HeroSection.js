@@ -117,7 +117,7 @@ export default function HeroSection() {
                   />
                 </Button>
               </Link>
-              <Link href="/classes">
+              <Link href="/all-classes">
                 <Button
                   variant="secondary"
                   className="w-full sm:w-auto border border-white/15 px-8 md:px-10 py-5 h-auto rounded-xl text-on-surface font-anybody text-label-bold uppercase tracking-widest backdrop-blur-md hover:bg-white/8 bg-white/5 hover:border-secondary/40 transition-all"

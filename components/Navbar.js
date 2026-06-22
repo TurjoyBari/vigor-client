@@ -108,9 +108,9 @@ export default function Navbar() {
             Home
           </Link>
           <Link
-            href="/classes"
+            href="/all-classes"
             // className={`text-sm font-medium transition-colors ${pathname.startsWith("/events") ? "text-pink-500 font-semibold" : "text-slate-300 hover:text-white"}`}
-            className={`font-anybody text-label-bold uppercase tracking-[0.2em] transition-colors ${pathname.startsWith("/classes")
+            className={`font-anybody text-label-bold uppercase tracking-[0.2em] transition-colors ${pathname.startsWith("/all-classes") || pathname.startsWith("/classes")
                 ? "text-primary border-b-2 border-primary-container pb-1"
                 : "text-on-surface hover:text-primary"
               }`}
@@ -118,9 +118,8 @@ export default function Navbar() {
             All Classes
           </Link>
           <Link
-            href="/community"
-            // className={`text-sm font-medium transition-colors ${pathname.startsWith("/events") ? "text-pink-500 font-semibold" : "text-slate-300 hover:text-white"}`}
-            className={`font-anybody text-label-bold uppercase tracking-[0.2em] transition-colors ${pathname.startsWith("/community")
+            href="/community-forum"
+            className={`font-anybody text-label-bold uppercase tracking-[0.2em] transition-colors ${pathname.startsWith("/community") || pathname.startsWith("/forum")
                 ? "text-primary border-b-2 border-primary-container pb-1"
                 : "text-on-surface hover:text-primary"
               }`}

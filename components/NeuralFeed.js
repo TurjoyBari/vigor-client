@@ -21,7 +21,7 @@ export default function NeuralFeed() {
           </h2>
           <div className="h-px flex-1 bg-white/10" />
           <Link
-            href="/community"
+            href="/community-forum"
             className="text-primary font-geist-label text-label-bold text-sm tracking-widest hover:underline uppercase"
           >
             Enter Community Hub

@@ -145,7 +145,7 @@ export default function UserBookedClassesPage() {
           columns={columns}
           data={classes}
           emptyPreset="classes"
-          emptyActionHref="/classes"
+          emptyActionHref="/all-classes"
           emptyActionLabel="Browse Classes"
           rowKey="id"
         />
@@ -169,7 +169,7 @@ export default function UserBookedClassesPage() {
             >
               Close
             </button>
-            <Link href="/classes" className={dashboardClasses.btnPrimary}>
+            <Link href="/all-classes" className={dashboardClasses.btnPrimary}>
               Browse More Classes
             </Link>
           </>

@@ -154,7 +154,7 @@ export default function UserFavoritesPage() {
         {favorites.length === 0 ? (
           <EmptyState
             preset="favorites"
-            actionHref="/classes"
+            actionHref="/all-classes"
             actionLabel="Explore Classes"
           />
         ) : (
