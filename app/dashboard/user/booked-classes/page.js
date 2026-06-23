@@ -1,86 +1,71 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import DataTable from "@/components/dashboard/ui/DataTable";
 import Modal from "@/components/dashboard/ui/Modal";
 import Badge from "@/components/dashboard/ui/Badge";
 import LoadingSkeleton from "@/components/dashboard/ui/LoadingSkeleton";
+import { useSession } from "@/lib/auth-client";
+import publicApi, { syncBackendToken, unwrap } from "@/lib/publicApi";
 import { dashboardClasses, DASHBOARD_ANIMATION } from "@/lib/dashboard/theme";
 
-async function fetchBookedClasses() {
-  await new Promise((resolve) => setTimeout(resolve, 500));
+function BookingStatusBadge({ status }) {
+  if (status === "confirmed") {
+    return <Badge variant="success">Confirmed</Badge>;
+  }
 
-  return [
-    {
-      id: "bc-1",
-      className: "HIIT Power Hour",
-      trainerName: "Marcus Reed",
-      schedule: "Mon, Wed, Fri · 7:00 AM",
-      category: "HIIT",
-      difficulty: "Advanced",
-      duration: "45 min",
-      location: "Studio A",
-      status: "confirmed",
-    },
-    {
-      id: "bc-2",
-      className: "Morning Yoga Flow",
-      trainerName: "Sarah Chen",
-      schedule: "Tue, Thu · 6:30 AM",
-      category: "Yoga",
-      difficulty: "Beginner",
-      duration: "60 min",
-      location: "Studio B",
-      status: "confirmed",
-    },
-    {
-      id: "bc-3",
-      className: "Strength Foundations",
-      trainerName: "Alex Johnson",
-      schedule: "Sat · 9:00 AM",
-      category: "Strength",
-      difficulty: "Intermediate",
-      duration: "50 min",
-      location: "Weight Room",
-      status: "confirmed",
-    },
-    {
-      id: "bc-4",
-      className: "Spin & Burn",
-      trainerName: "Emily Torres",
-      schedule: "Sun · 8:00 AM",
-      category: "Cycling",
-      difficulty: "Intermediate",
-      duration: "40 min",
-      location: "Cycle Studio",
-      status: "waitlisted",
-    },
-  ];
+  return <Badge status={status || "pending"} />;
 }
 
 export default function UserBookedClassesPage() {
+  const { data: session, isPending } = useSession();
   const [loading, setLoading] = useState(true);
-  const [classes, setClasses] = useState([]);
-  const [selectedClass, setSelectedClass] = useState(null);
+  const [bookings, setBookings] = useState([]);
+  const [selectedBooking, setSelectedBooking] = useState(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
+  const fetchBookings = useCallback(async () => {
+    if (!session?.user) {
+      if (!isPending) {
+        setBookings([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user || session.user;
+
+      console.log("User:", vigorUser);
+
+      const response = await publicApi.bookings.getMine();
+      const data = unwrap(response);
+      const bookingsFromDb = data?.classes || data?.bookings || [];
+
+      console.log("Bookings from DB:", bookingsFromDb);
+
+      const confirmedBookings = bookingsFromDb.filter(
+        (booking) => booking.status === "confirmed"
+      );
+
+      console.log("Filtered bookings:", confirmedBookings);
+
+      setBookings(confirmedBookings);
+    } catch (error) {
+      console.error("Failed to load booked classes:", error);
+      setBookings([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user, isPending]);
+
   useEffect(() => {
-    let mounted = true;
-
-    fetchBookedClasses()
-      .then((data) => {
-        if (mounted) setClasses(data);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    fetchBookings();
+  }, [fetchBookings]);
 
   const columns = useMemo(
     () => [
@@ -103,6 +88,18 @@ export default function UserBookedClassesPage() {
         ),
       },
       {
+        key: "category",
+        label: "Category",
+        render: (row) => (
+          <span className="text-on-surface-variant">{row.category}</span>
+        ),
+      },
+      {
+        key: "status",
+        label: "Status",
+        render: (row) => <BookingStatusBadge status={row.status} />,
+      },
+      {
         key: "actions",
         label: "Actions",
         render: (row) => (
@@ -110,7 +107,7 @@ export default function UserBookedClassesPage() {
             type="button"
             className={dashboardClasses.btnSecondary}
             onClick={() => {
-              setSelectedClass(row);
+              setSelectedBooking(row);
               setDetailsOpen(true);
             }}
           >
@@ -122,7 +119,7 @@ export default function UserBookedClassesPage() {
     []
   );
 
-  if (loading) {
+  if (isPending || loading) {
     return <LoadingSkeleton variant="page" />;
   }
 
@@ -137,13 +134,14 @@ export default function UserBookedClassesPage() {
         <header>
           <h2 className={dashboardClasses.pageTitle}>Booked Classes</h2>
           <p className={dashboardClasses.pageSubtitle}>
-            View and manage all classes you have enrolled in.
+            Class snapshots from your MongoDB bookings — payment details are kept
+            separately.
           </p>
         </header>
 
         <DataTable
           columns={columns}
-          data={classes}
+          data={bookings}
           emptyPreset="classes"
           emptyActionHref="/all-classes"
           emptyActionLabel="Browse Classes"
@@ -155,10 +153,10 @@ export default function UserBookedClassesPage() {
         isOpen={detailsOpen}
         onClose={() => {
           setDetailsOpen(false);
-          setSelectedClass(null);
+          setSelectedBooking(null);
         }}
-        title={selectedClass?.className || "Class Details"}
-        description="Your booking information"
+        title={selectedBooking?.className || "Class Details"}
+        description="Booking snapshot stored at enrollment time"
         size="md"
         footer={
           <>
@@ -175,25 +173,29 @@ export default function UserBookedClassesPage() {
           </>
         }
       >
-        {selectedClass && (
+        {selectedBooking && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="primary">{selectedClass.category}</Badge>
-              <Badge variant="secondary">{selectedClass.difficulty}</Badge>
-              <Badge
-                status={
-                  selectedClass.status === "waitlisted" ? "pending" : "approved"
-                }
-              />
+              <Badge variant="primary">{selectedBooking.category}</Badge>
+              <Badge variant="secondary">{selectedBooking.difficulty}</Badge>
+              <BookingStatusBadge status={selectedBooking.status} />
             </div>
 
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-xl bg-surface-container-low/60 border border-primary-container/15 p-4">
                 <dt className="font-geist-label text-xs uppercase tracking-wider text-on-surface-variant">
+                  Class
+                </dt>
+                <dd className="mt-1 font-hanken text-sm text-white">
+                  {selectedBooking.className}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-surface-container-low/60 border border-primary-container/15 p-4">
+                <dt className="font-geist-label text-xs uppercase tracking-wider text-on-surface-variant">
                   Trainer
                 </dt>
                 <dd className="mt-1 font-hanken text-sm text-white">
-                  {selectedClass.trainerName}
+                  {selectedBooking.trainerName}
                 </dd>
               </div>
               <div className="rounded-xl bg-surface-container-low/60 border border-primary-container/15 p-4">
@@ -201,7 +203,7 @@ export default function UserBookedClassesPage() {
                   Schedule
                 </dt>
                 <dd className="mt-1 font-hanken text-sm text-white">
-                  {selectedClass.schedule}
+                  {selectedBooking.schedule}
                 </dd>
               </div>
               <div className="rounded-xl bg-surface-container-low/60 border border-primary-container/15 p-4">
@@ -209,7 +211,7 @@ export default function UserBookedClassesPage() {
                   Duration
                 </dt>
                 <dd className="mt-1 font-hanken text-sm text-white">
-                  {selectedClass.duration}
+                  {selectedBooking.duration}
                 </dd>
               </div>
               <div className="rounded-xl bg-surface-container-low/60 border border-primary-container/15 p-4">
@@ -217,7 +219,15 @@ export default function UserBookedClassesPage() {
                   Location
                 </dt>
                 <dd className="mt-1 font-hanken text-sm text-white">
-                  {selectedClass.location}
+                  {selectedBooking.location}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-surface-container-low/60 border border-primary-container/15 p-4">
+                <dt className="font-geist-label text-xs uppercase tracking-wider text-on-surface-variant">
+                  Status
+                </dt>
+                <dd className="mt-1 font-hanken text-sm text-white capitalize">
+                  {selectedBooking.status}
                 </dd>
               </div>
             </dl>
