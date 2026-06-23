@@ -3,7 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Comment, ArrowRight, Persons } from "@gravity-ui/icons";
+import {
+  Comment,
+  ArrowRight,
+  Persons,
+  ThumbsUp,
+  ThumbsDown,
+} from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import Badge from "@/components/dashboard/ui/Badge";
 import {
@@ -54,12 +60,16 @@ function PostCoverImage({ src, alt }) {
     <img
       src={src}
       alt={alt}
+      width={500}
+      height={300}
       className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
     />
   );
 }
 
 export default function ForumPostCard({ post, index = 0 }) {
+  const postId = post._id || post.id;
+
   return (
     <motion.article
       className={cn(
@@ -87,7 +97,7 @@ export default function ForumPostCard({ post, index = 0 }) {
           </h3>
           <p className="flex items-center gap-1.5 font-hanken text-xs text-on-surface-variant">
             <Icon icon={Persons} size={14} className="text-secondary shrink-0" />
-            <span className="truncate">{post.author}</span>
+            <span className="truncate">{post.authorName}</span>
             {post.createdAt && (
               <>
                 <span className="text-on-surface-variant/50">·</span>
@@ -100,8 +110,23 @@ export default function ForumPostCard({ post, index = 0 }) {
           </p>
         </div>
 
+        <div className="flex flex-wrap items-center gap-4 text-xs font-geist-label text-on-surface-variant border-t border-primary-container/15 pt-3">
+          <span className="inline-flex items-center gap-1.5">
+            <Icon icon={ThumbsUp} size={14} className="text-secondary" />
+            {post.likeCount ?? 0}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Icon icon={ThumbsDown} size={14} className="text-on-surface-variant" />
+            {post.dislikeCount ?? 0}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Icon icon={Comment} size={14} className="text-primary" />
+            {post.commentCount ?? 0}
+          </span>
+        </div>
+
         <Link
-          href={`/forum/${post.id}`}
+          href={`/forum/${postId}`}
           className={cn(dashboardClasses.btnSecondary, "w-full justify-center mt-auto")}
         >
           Read More

@@ -15,15 +15,26 @@ import {
 export default function CommunityForumPage() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await publicApi.forum.getPosts();
       const data = unwrap(response);
-      setPosts(data?.posts || []);
-    } catch {
+      const nextPosts = data?.posts || [];
+
+      console.log("Forum API Response:", nextPosts);
+      nextPosts.forEach((post) => {
+        console.log("Post Image:", post.image);
+      });
+
+      setPosts(nextPosts);
+    } catch (fetchError) {
+      console.error("Failed to fetch forum posts:", fetchError);
       setPosts([]);
+      setError("Unable to load forum posts. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -57,7 +68,9 @@ export default function CommunityForumPage() {
         <p className="mb-6 font-geist-label text-label-sm uppercase tracking-wider text-on-surface-variant">
           {loading
             ? "Loading posts..."
-            : `${posts.length} post${posts.length === 1 ? "" : "s"}`}
+            : error
+              ? "Failed to load posts"
+              : `${posts.length} post${posts.length === 1 ? "" : "s"}`}
         </p>
 
         {loading ? (
@@ -68,6 +81,22 @@ export default function CommunityForumPage() {
                 className="h-[380px] rounded-[20px] border border-primary-container/20 bg-surface-container/40 animate-pulse"
               />
             ))}
+          </div>
+        ) : error ? (
+          <div
+            className={cn(
+              dashboardClasses.glassCard,
+              "py-14 text-center px-6 space-y-4"
+            )}
+          >
+            <p className="font-hanken text-sm text-on-surface-variant">{error}</p>
+            <button
+              type="button"
+              onClick={fetchPosts}
+              className={cn(dashboardClasses.btnSecondary, "inline-flex")}
+            >
+              Try Again
+            </button>
           </div>
         ) : posts.length === 0 ? (
           <div className={cn(dashboardClasses.glassCard, "py-16 text-center px-6")}>

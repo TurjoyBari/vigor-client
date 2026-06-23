@@ -7,6 +7,9 @@ import { useForm } from "react-hook-form";
 import { toast } from "react-toastify";
 import { Comment, Picture, ArrowRight } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
+import { useSession } from "@/lib/auth-client";
+import { trainerApi } from "@/lib/dashboard/api";
+import { syncBackendToken } from "@/lib/publicApi";
 import { uploadImage } from "@/utils/uploadImage";
 import {
   cn,
@@ -14,13 +17,9 @@ import {
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-async function createForumPost(payload) {
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  return { success: true, id: `post-${Date.now()}`, ...payload };
-}
-
 export default function TrainerAddForumPostPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [imagePreview, setImagePreview] = useState(null);
   const [uploading, setUploading] = useState(false);
 
@@ -47,6 +46,10 @@ export default function TrainerAddForumPostPage() {
       try {
         setUploading(true);
         imageUrl = await uploadImage(data.image[0]);
+        if (!imageUrl) {
+          toast.error("Failed to upload post image.");
+          return;
+        }
       } catch {
         toast.error("Failed to upload post image.");
         return;
@@ -55,12 +58,18 @@ export default function TrainerAddForumPostPage() {
       }
     }
 
+    const payload = {
+      title: data.title.trim(),
+      description: data.description.trim(),
+      image: imageUrl,
+    };
+
     try {
-      await createForumPost({
-        title: data.title.trim(),
-        description: data.description.trim(),
-        image: imageUrl,
-      });
+      if (session?.user) {
+        await syncBackendToken(session.user);
+      }
+
+      await trainerApi.createForumPost(payload);
 
       toast.success("Forum post published successfully!");
       setTimeout(() => router.push("/dashboard/trainer/my-forum-posts"), 1500);
