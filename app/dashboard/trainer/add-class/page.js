@@ -7,6 +7,10 @@ import { useForm } from "react-hook-form";
 import { toast } from "react-toastify";
 import { Plus, Picture, ArrowRight } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
+import { useSession } from "@/lib/auth-client";
+import { trainerApi } from "@/lib/dashboard/api";
+import { syncBackendToken } from "@/lib/publicApi";
+import { HERO_IMAGE } from "@/lib/constants/images";
 import { uploadImage } from "@/utils/uploadImage";
 import {
   cn,
@@ -27,13 +31,9 @@ const CATEGORIES = [
 
 const DIFFICULTY_LEVELS = ["Beginner", "Intermediate", "Advanced", "All Levels"];
 
-async function createClass(payload) {
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  return { success: true, id: `class-${Date.now()}`, ...payload };
-}
-
 export default function TrainerAddClassPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [imagePreview, setImagePreview] = useState(null);
   const [uploading, setUploading] = useState(false);
 
@@ -65,6 +65,10 @@ export default function TrainerAddClassPage() {
       try {
         setUploading(true);
         imageUrl = await uploadImage(data.image[0]);
+        if (!imageUrl) {
+          toast.error("Failed to upload class image.");
+          return;
+        }
       } catch {
         toast.error("Failed to upload class image.");
         return;
@@ -73,17 +77,23 @@ export default function TrainerAddClassPage() {
       }
     }
 
+    const payload = {
+      className: data.className.trim(),
+      category: data.category,
+      difficulty: data.difficulty,
+      duration: data.duration.trim(),
+      schedule: data.schedule.trim(),
+      price: parseFloat(data.price),
+      description: data.description.trim(),
+      image: imageUrl || HERO_IMAGE,
+    };
+
     try {
-      await createClass({
-        className: data.className.trim(),
-        category: data.category,
-        difficulty: data.difficulty,
-        duration: data.duration.trim(),
-        schedule: data.schedule.trim(),
-        price: parseFloat(data.price),
-        description: data.description.trim(),
-        image: imageUrl,
-      });
+      if (session?.user) {
+        await syncBackendToken(session.user);
+      }
+
+      await trainerApi.createClass(payload);
 
       toast.success("Class created successfully!");
       setTimeout(() => router.push("/dashboard/trainer/my-classes"), 1500);
