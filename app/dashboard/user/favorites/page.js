@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import { Star, TrashBin } from "@gravity-ui/icons";
@@ -9,47 +10,55 @@ import Icon from "@/components/Icon";
 import EmptyState from "@/components/dashboard/ui/EmptyState";
 import LoadingSkeleton from "@/components/dashboard/ui/LoadingSkeleton";
 import ConfirmationDialog from "@/components/dashboard/ui/ConfirmationDialog";
+import { useSession } from "@/lib/auth-client";
+import publicApi, { syncBackendToken, unwrap } from "@/lib/publicApi";
 import {
   cn,
   dashboardClasses,
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-const INITIAL_FAVORITES = [
-  {
-    id: "fav-1",
-    className: "HIIT Power Hour",
-    trainerName: "Marcus Reed",
-    image:
-      "https://lh3.googleusercontent.com/aida/AP1WRLtCJNd7GGrZLAAM1Rl2NJf6X5sYijONIH94EItgwomRJU0NZhimF3Ghp-uURYwM7c0TMXr5543_WnhEAxKBzZDDwPN9AzkDL4Om-n1mHl5gB4w3diT_1yZiKZuoovGaOQo1pBQg2mnQCe9eJTGAsu9WwliavpvJl6rVISYTQhDrnU5TXTLeLjI4d9R04s0195ky9wMIA-LYNrq63370ug59nC-smrdSYMwvYsKw89BNFb12HXRJdUkC8_0",
-    category: "HIIT",
-  },
-  {
-    id: "fav-2",
-    className: "Morning Yoga Flow",
-    trainerName: "Sarah Chen",
-    image:
-      "https://lh3.googleusercontent.com/aida/AP1WRLtCJNd7GGrZLAAM1Rl2NJf6X5sYijONIH94EItgwomRJU0NZhimF3Ghp-uURYwM7c0TMXr5543_WnhEAxKBzZDDwPN9AzkDL4Om-n1mHl5gB4w3diT_1yZiKZuoovGaOQo1pBQg2mnQCe9eJTGAsu9WwliavpvJl6rVISYTQhDrnU5TXTLeLjI4d9R04s0195ky9wMIA-LYNrq63370ug59nC-smrdSYMwvYsKw89BNFb12HXRJdUkC8_0",
-    category: "Yoga",
-  },
-  {
-    id: "fav-3",
-    className: "Strength Foundations",
-    trainerName: "Alex Johnson",
-    image:
-      "https://lh3.googleusercontent.com/aida/AP1WRLsa8lsZMsP7-3wJ5w20PwFIaHHIGF2OFs-itquo_S9XLclfKE7rP9-4b1t4-4IiW4PAETKHAWi-L-9YpWO9vQATetII1uuQV6wXmj5TEoerRpse8iIhcoxdy2WUX7adf_gnp93q_E9AwwN08gweI5gaOauskdSmIPSf9W9c_W9btdUOsO2iC-GgrL2RyZ6kl_Rl5hmpQLgGUHotz4t0HowIGQ1rq7n7ay38ofK5vQnAHLUzseNu7qoj2A",
-    category: "Strength",
-  },
-];
+const PLACEHOLDER_IMAGE = "/images/hero-strongest.png";
 
-async function fetchFavorites() {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return INITIAL_FAVORITES;
+function formatPrice(price) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Number(price) || 0);
 }
 
-async function removeFavorite(id) {
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  return { success: true, id };
+function FavoriteCardImage({ src, alt }) {
+  if (src && src.startsWith("/")) {
+    return (
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        className="object-cover transition-transform duration-500 group-hover:scale-105"
+        sizes="(max-width: 768px) 100vw, 33vw"
+      />
+    );
+  }
+
+  if (src && !src.startsWith("blob:") && !src.startsWith("data:")) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+      />
+    );
+  }
+
+  return (
+    <Image
+      src={PLACEHOLDER_IMAGE}
+      alt={alt}
+      fill
+      className="object-cover transition-transform duration-500 group-hover:scale-105"
+      sizes="(max-width: 768px) 100vw, 33vw"
+    />
+  );
 }
 
 function FavoriteCard({ item, index, onRemove }) {
@@ -66,21 +75,18 @@ function FavoriteCard({ item, index, onRemove }) {
       whileHover={{ y: -4 }}
     >
       <div className="relative h-44 w-full overflow-hidden">
-        <Image
-          src={item.image}
-          alt={item.className}
-          fill
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
-          sizes="(max-width: 768px) 100vw, 33vw"
-        />
+        <FavoriteCardImage src={item.image} alt={item.className} />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0B1120] via-transparent to-transparent" />
         <span className="absolute top-3 left-3 inline-flex items-center gap-1 rounded-full bg-primary-container/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-on-primary-container">
           <Icon icon={Star} size={12} />
           {item.category}
         </span>
+        <span className="absolute top-3 right-3 rounded-full bg-secondary/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#0B1120]">
+          {item.difficulty}
+        </span>
       </div>
 
-      <div className="p-4 md:p-5 space-y-3">
+      <div className="p-4 md:p-5 space-y-4">
         <div>
           <h3 className="font-anybody text-lg font-bold text-white">{item.className}</h3>
           <p className="mt-1 font-hanken text-sm text-on-surface-variant">
@@ -89,50 +95,120 @@ function FavoriteCard({ item, index, onRemove }) {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => onRemove(item)}
-          className={cn(dashboardClasses.btnDanger, "w-full")}
-        >
-          <Icon icon={TrashBin} size={16} />
-          Remove
-        </button>
+        <dl className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <dt className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+              Schedule
+            </dt>
+            <dd className="mt-0.5 text-on-surface">{item.schedule || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+              Duration
+            </dt>
+            <dd className="mt-0.5 text-on-surface">{item.duration || "—"}</dd>
+          </div>
+          <div className="col-span-2">
+            <dt className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+              Price
+            </dt>
+            <dd className="mt-0.5 font-semibold text-secondary">
+              {formatPrice(item.price)}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Link
+            href={`/classes/${item.classId}`}
+            className={cn(dashboardClasses.btnSecondary, "flex-1 text-center")}
+          >
+            View Class
+          </Link>
+          <button
+            type="button"
+            onClick={() => onRemove(item)}
+            className={cn(dashboardClasses.btnDanger, "flex-1")}
+          >
+            <Icon icon={TrashBin} size={16} />
+            Remove
+          </button>
+        </div>
       </div>
     </motion.article>
   );
 }
 
 export default function UserFavoritesPage() {
+  const { data: session, isPending } = useSession();
   const [loading, setLoading] = useState(true);
   const [favorites, setFavorites] = useState([]);
   const [removeTarget, setRemoveTarget] = useState(null);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  const fetchFavorites = useCallback(async () => {
+    if (!session?.user) {
+      if (!isPending) {
+        setFavorites([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user;
+
+      if (!vigorUser?.id) {
+        throw new Error("VIGOR user id missing after auth sync");
+      }
+
+      console.log("Current User:", vigorUser);
+
+      const response = await publicApi.favorites.getUserFavorites(vigorUser.id);
+      const data = unwrap(response);
+      const favoritesFromDb = data?.favorites || [];
+
+      console.log("Favorites API Response:", favoritesFromDb);
+
+      setFavorites(favoritesFromDb);
+    } catch (error) {
+      console.error("Failed to load favorites:", error);
+      setFavorites([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user, isPending]);
 
   useEffect(() => {
-    let mounted = true;
-
-    fetchFavorites()
-      .then((data) => {
-        if (mounted) setFavorites(data);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    fetchFavorites();
+  }, [fetchFavorites]);
 
   const handleRemoveConfirm = async () => {
-    if (!removeTarget) return;
+    if (!removeTarget?.classId) return;
 
-    await removeFavorite(removeTarget.id);
-    setFavorites((prev) => prev.filter((item) => item.id !== removeTarget.id));
-    toast.success(`"${removeTarget.className}" removed from favorites.`);
+    setRemoving(true);
+    try {
+      await syncBackendToken(session.user);
+      await publicApi.favorites.removeByClassId(removeTarget.classId);
+      setFavorites((prev) =>
+        prev.filter((item) => item.classId !== removeTarget.classId)
+      );
+      console.log("Favorite Removed");
+      toast.success(`"${removeTarget.className}" removed from favorites.`);
+      setRemoveOpen(false);
+      setRemoveTarget(null);
+    } catch (error) {
+      console.error("Failed to remove favorite:", error);
+      toast.error("Unable to remove favorite. Please try again.");
+    } finally {
+      setRemoving(false);
+    }
   };
 
-  if (loading) {
+  if (isPending || loading) {
     return <LoadingSkeleton variant="grid" count={3} />;
   }
 
@@ -147,7 +223,7 @@ export default function UserFavoritesPage() {
         <header>
           <h2 className={dashboardClasses.pageTitle}>Favorites</h2>
           <p className={dashboardClasses.pageSubtitle}>
-            Classes you have saved for quick access.
+            Saved classes loaded from your MongoDB favorites collection.
           </p>
         </header>
 
@@ -177,6 +253,7 @@ export default function UserFavoritesPage() {
       <ConfirmationDialog
         isOpen={removeOpen}
         onClose={() => {
+          if (removing) return;
           setRemoveOpen(false);
           setRemoveTarget(null);
         }}
@@ -188,7 +265,7 @@ export default function UserFavoritesPage() {
             ? `Are you sure you want to remove "${removeTarget.className}" from your favorites?`
             : "Are you sure you want to remove this class?"
         }
-        confirmLabel="Remove"
+        confirmLabel={removing ? "Removing..." : "Remove"}
       />
     </>
   );

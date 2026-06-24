@@ -167,23 +167,33 @@ export default function ClassDetailsPage() {
 
   const handleFavoriteToggle = async () => {
     if (!requireAuth()) return;
+    if (!classItem || !classId) return;
 
     setActionLoading(true);
     try {
-      await syncBackendToken(session.user);
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user || session.user;
 
-      if (isFavorite && favoriteId) {
-        await publicApi.favorites.remove(favoriteId);
+      console.log("Current User:", vigorUser);
+      console.log("Current Class:", classItem);
+
+      if (isFavorite) {
+        await publicApi.favorites.removeByClassId(classId);
         setIsFavorite(false);
         setFavoriteId(null);
+        console.log("Favorite Removed");
         toast.success("Removed from favorites");
         return;
       }
 
       const response = await publicApi.favorites.add(classId);
       const data = unwrap(response);
+      const favorite = data?.favorite;
+
+      console.log("Favorite Added:", favorite);
+
       setIsFavorite(true);
-      setFavoriteId(data?.favorite?.favoriteId || data?.favorite?.id || null);
+      setFavoriteId(favorite?.favoriteId || favorite?.id || null);
       toast.success("Saved to favorites");
     } catch (error) {
       const status = error?.response?.status;
