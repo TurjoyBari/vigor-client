@@ -9,7 +9,7 @@ import { Comment, Picture, ArrowRight } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import { useSession } from "@/lib/auth-client";
 import { trainerApi } from "@/lib/dashboard/api";
-import { syncBackendToken } from "@/lib/publicApi";
+import { syncBackendToken, unwrap } from "@/lib/publicApi";
 import { uploadImage } from "@/utils/uploadImage";
 import {
   cn,
@@ -22,11 +22,12 @@ export default function TrainerAddForumPostPage() {
   const { data: session } = useSession();
   const [imagePreview, setImagePreview] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm({
     defaultValues: {
       title: "",
@@ -40,45 +41,78 @@ export default function TrainerAddForumPostPage() {
   };
 
   const onSubmit = async (data) => {
-    let imageUrl = null;
+    console.log("Forum form submitted");
 
-    if (data.image?.[0]) {
-      try {
-        setUploading(true);
-        imageUrl = await uploadImage(data.image[0]);
-        if (!imageUrl) {
-          toast.error("Failed to upload post image.");
-          return;
-        }
-      } catch {
-        toast.error("Failed to upload post image.");
-        return;
-      } finally {
-        setUploading(false);
-      }
+    if (!session?.user) {
+      toast.info("Please log in to publish a forum post.");
+      router.push("/login?redirect=/dashboard/trainer/add-forum-post");
+      return;
     }
 
-    const payload = {
-      title: data.title.trim(),
-      description: data.description.trim(),
-      image: imageUrl,
-    };
+    setSubmitting(true);
+    let imageUrl = null;
 
     try {
-      if (session?.user) {
-        await syncBackendToken(session.user);
+      if (data.image?.[0]) {
+        try {
+          setUploading(true);
+          imageUrl = await uploadImage(data.image[0]);
+          if (!imageUrl) {
+            toast.error("Failed to upload post image.");
+            return;
+          }
+        } catch (error) {
+          console.error("Forum image upload failed:", error);
+          toast.error("Failed to upload post image.");
+          return;
+        } finally {
+          setUploading(false);
+        }
       }
 
-      await trainerApi.createForumPost(payload);
+      const payload = {
+        title: data.title.trim(),
+        description: data.description.trim(),
+        image: imageUrl,
+      };
+
+      console.log("Forum form data:", payload);
+
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user;
+
+      console.log("Current User:", vigorUser);
+
+      if (vigorUser?.role !== "trainer" && vigorUser?.role !== "admin") {
+        toast.error("Only trainers can publish forum posts. Please refresh your session.");
+        return;
+      }
+
+      const response = await trainerApi.createForumPost(payload);
+      const result = unwrap(response);
+      const post = result?.post;
+
+      console.log("Forum post created in DB:", post);
 
       toast.success("Forum post published successfully!");
       setTimeout(() => router.push("/dashboard/trainer/my-forum-posts"), 1500);
-    } catch {
-      toast.error("Failed to publish post. Please try again.");
+    } catch (error) {
+      console.error("Failed to publish forum post:", error);
+      const status = error.response?.status;
+      const message = error.response?.data?.message;
+
+      if (!status || status === 401) {
+        toast.error(message || "Please log in again and retry.");
+      } else if (status !== 403 && status !== 400) {
+        toast.error(message || "Failed to publish post. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
+      setUploading(false);
     }
   };
 
-  const isBusy = isSubmitting || uploading;
+  const isBusy = submitting || uploading;
 
   return (
     <motion.div
@@ -189,7 +223,7 @@ export default function TrainerAddForumPostPage() {
           disabled={isBusy}
           className={cn(dashboardClasses.btnPrimary, "w-full py-3.5")}
         >
-          {uploading ? "Uploading image..." : isSubmitting ? "Publishing..." : "Publish Post"}
+          {uploading ? "Uploading image..." : submitting ? "Publishing..." : "Publish Post"}
           {!isBusy && <Icon icon={ArrowRight} size={18} />}
         </button>
       </form>

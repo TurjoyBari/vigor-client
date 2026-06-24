@@ -9,7 +9,7 @@ import { Plus, Picture, ArrowRight } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import { useSession } from "@/lib/auth-client";
 import { trainerApi } from "@/lib/dashboard/api";
-import { syncBackendToken } from "@/lib/publicApi";
+import { syncBackendToken, unwrap } from "@/lib/publicApi";
 import { HERO_IMAGE } from "@/lib/constants/images";
 import { uploadImage } from "@/utils/uploadImage";
 import {
@@ -36,11 +36,12 @@ export default function TrainerAddClassPage() {
   const { data: session } = useSession();
   const [imagePreview, setImagePreview] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm({
     defaultValues: {
       className: "",
@@ -59,50 +60,83 @@ export default function TrainerAddClassPage() {
   };
 
   const onSubmit = async (data) => {
-    let imageUrl = null;
+    console.log("Form submitted");
 
-    if (data.image?.[0]) {
-      try {
-        setUploading(true);
-        imageUrl = await uploadImage(data.image[0]);
-        if (!imageUrl) {
-          toast.error("Failed to upload class image.");
-          return;
-        }
-      } catch {
-        toast.error("Failed to upload class image.");
-        return;
-      } finally {
-        setUploading(false);
-      }
+    if (!session?.user) {
+      toast.info("Please log in to create a class.");
+      router.push("/login?redirect=/dashboard/trainer/add-class");
+      return;
     }
 
-    const payload = {
-      className: data.className.trim(),
-      category: data.category,
-      difficulty: data.difficulty,
-      duration: data.duration.trim(),
-      schedule: data.schedule.trim(),
-      price: parseFloat(data.price),
-      description: data.description.trim(),
-      image: imageUrl || HERO_IMAGE,
-    };
+    setSubmitting(true);
+    let imageUrl = null;
 
     try {
-      if (session?.user) {
-        await syncBackendToken(session.user);
+      if (data.image?.[0]) {
+        try {
+          setUploading(true);
+          imageUrl = await uploadImage(data.image[0]);
+          if (!imageUrl) {
+            toast.error("Failed to upload class image.");
+            return;
+          }
+        } catch (error) {
+          console.error("Image upload failed:", error);
+          toast.error("Failed to upload class image.");
+          return;
+        } finally {
+          setUploading(false);
+        }
       }
 
-      await trainerApi.createClass(payload);
+      const payload = {
+        className: data.className.trim(),
+        category: data.category,
+        difficulty: data.difficulty,
+        duration: data.duration.trim(),
+        schedule: data.schedule.trim(),
+        price: parseFloat(data.price),
+        description: data.description.trim(),
+        image: imageUrl || HERO_IMAGE,
+      };
+
+      console.log("Form data:", payload);
+
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user;
+
+      console.log("Current User:", vigorUser);
+
+      if (vigorUser?.role !== "trainer" && vigorUser?.role !== "admin") {
+        toast.error("Only trainers can create classes. Please refresh your session.");
+        return;
+      }
+
+      const response = await trainerApi.createClass(payload);
+      const result = unwrap(response);
+      const createdClass = result?.class;
+
+      console.log("Class Created from DB:", createdClass);
 
       toast.success("Class created successfully!");
       setTimeout(() => router.push("/dashboard/trainer/my-classes"), 1500);
-    } catch {
-      toast.error("Failed to create class. Please try again.");
+    } catch (error) {
+      console.error("Failed to create class:", error);
+      const status = error.response?.status;
+      const message = error.response?.data?.message;
+
+      if (!status || status === 401) {
+        toast.error(message || "Please log in again and retry.");
+      } else if (status !== 403 && status !== 400) {
+        toast.error(message || "Failed to create class. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
+      setUploading(false);
     }
   };
 
-  const isBusy = isSubmitting || uploading;
+  const isBusy = submitting || uploading;
 
   return (
     <motion.div
@@ -187,7 +221,6 @@ export default function TrainerAddClassPage() {
             </label>
             <select
               id="category"
-              defaultValue=""
               className={dashboardClasses.select}
               {...register("category", { required: "Category is required" })}
             >
@@ -207,7 +240,6 @@ export default function TrainerAddClassPage() {
             </label>
             <select
               id="difficulty"
-              defaultValue=""
               className={dashboardClasses.select}
               {...register("difficulty", { required: "Difficulty level is required" })}
             >
@@ -306,7 +338,7 @@ export default function TrainerAddClassPage() {
           disabled={isBusy}
           className={cn(dashboardClasses.btnPrimary, "w-full py-3.5")}
         >
-          {uploading ? "Uploading image..." : isSubmitting ? "Creating..." : "Create Class"}
+          {uploading ? "Uploading image..." : submitting ? "Creating..." : "Create Class"}
           {!isBusy && <Icon icon={ArrowRight} size={18} />}
         </button>
       </form>

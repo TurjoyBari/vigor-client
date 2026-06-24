@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import { Pencil, TrashBin, Persons } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
+import { useSession } from "@/lib/auth-client";
+import { trainerApi } from "@/lib/dashboard/api";
+import { syncBackendToken, unwrap } from "@/lib/publicApi";
 import DataTable from "@/components/dashboard/ui/DataTable";
 import Modal from "@/components/dashboard/ui/Modal";
 import Badge from "@/components/dashboard/ui/Badge";
@@ -17,95 +20,128 @@ import {
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-const INITIAL_CLASSES = [
-  {
-    id: "cls-1",
-    className: "HIIT Power Hour",
-    category: "HIIT",
-    status: "published",
-    studentCount: 32,
-    students: [
-      { id: "s1", name: "Alex Johnson", email: "alex@example.com", enrolledAt: "2026-06-01" },
-      { id: "s2", name: "Jamie Lee", email: "jamie@example.com", enrolledAt: "2026-06-03" },
-      { id: "s3", name: "Chris Morgan", email: "chris@example.com", enrolledAt: "2026-06-05" },
-    ],
-  },
-  {
-    id: "cls-2",
-    className: "Morning Yoga Flow",
-    category: "Yoga",
-    status: "published",
-    studentCount: 24,
-    students: [
-      { id: "s4", name: "Sarah Chen", email: "sarah@example.com", enrolledAt: "2026-06-02" },
-      { id: "s5", name: "Taylor Brooks", email: "taylor@example.com", enrolledAt: "2026-06-04" },
-    ],
-  },
-  {
-    id: "cls-3",
-    className: "Strength Foundations",
-    category: "Strength",
-    status: "draft",
-    studentCount: 8,
-    students: [
-      { id: "s6", name: "Jordan Smith", email: "jordan@example.com", enrolledAt: "2026-06-10" },
-    ],
-  },
-  {
-    id: "cls-4",
-    className: "Spin & Burn",
-    category: "Cycling",
-    status: "pending",
-    studentCount: 0,
-    students: [],
-  },
-];
-
-async function fetchTrainerClasses() {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return INITIAL_CLASSES;
+function mapBadgeStatus(status) {
+  if (status === "published" || status === "approved") return "approved";
+  if (status === "rejected") return "rejected";
+  if (status === "pending") return "pending";
+  return "draft";
 }
 
-async function deleteClass(id) {
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  return { success: true, id };
+function mapClass(item) {
+  return {
+    id: item.id,
+    className: item.className,
+    category: item.category,
+    status: item.status,
+    bookingCount: item.bookingCount ?? item.studentCount ?? 0,
+  };
+}
+
+function formatEnrolledAt(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export default function TrainerMyClassesPage() {
+  const { data: session, isPending: sessionPending } = useSession();
   const [loading, setLoading] = useState(true);
   const [classes, setClasses] = useState([]);
   const [studentsModalOpen, setStudentsModalOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const fetchClasses = useCallback(async () => {
+    if (!session?.user) {
+      if (!sessionPending) {
+        setClasses([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await syncBackendToken(session.user);
+
+      const response = await trainerApi.getClasses();
+      const data = unwrap(response);
+      const classData = (data?.classes || []).map(mapClass);
+
+      console.log("Trainer classes from DB:", classData);
+
+      setClasses(classData);
+    } catch (error) {
+      console.error("Failed to load trainer classes:", error);
+      setClasses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user, sessionPending]);
 
   useEffect(() => {
-    let mounted = true;
+    fetchClasses();
+  }, [fetchClasses]);
 
-    fetchTrainerClasses()
-      .then((data) => {
-        if (mounted) setClasses(data);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const handleViewStudents = (row) => {
+  const handleViewStudents = async (row) => {
     setSelectedClass(row);
     setStudentsModalOpen(true);
+    setStudents([]);
+    setStudentsLoading(true);
+
+    try {
+      if (session?.user) {
+        await syncBackendToken(session.user);
+      }
+
+      const response = await trainerApi.getClassStudents(row.id);
+      const data = unwrap(response);
+      const studentList = data?.students || [];
+
+      console.log("Class students from DB:", studentList);
+
+      setStudents(
+        studentList.map((student) => ({
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          enrolledAt: formatEnrolledAt(student.enrolledAt),
+        }))
+      );
+    } catch (error) {
+      console.error("Failed to load class students:", error);
+      toast.error("Failed to load enrolled students.");
+    } finally {
+      setStudentsLoading(false);
+    }
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
 
-    await deleteClass(deleteTarget.id);
-    setClasses((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-    toast.success(`"${deleteTarget.className}" deleted successfully.`);
+    setDeleting(true);
+    try {
+      if (session?.user) {
+        await syncBackendToken(session.user);
+      }
+
+      await trainerApi.deleteClass(deleteTarget.id);
+      setClasses((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+      toast.success(`"${deleteTarget.className}" deleted successfully.`);
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+    } catch (error) {
+      console.error("Failed to delete class:", error);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const columns = useMemo(
@@ -125,24 +161,14 @@ export default function TrainerMyClassesPage() {
       {
         key: "status",
         label: "Status",
-        render: (row) => (
-          <Badge
-            status={
-              row.status === "published"
-                ? "approved"
-                : row.status === "pending"
-                  ? "pending"
-                  : "draft"
-            }
-          />
-        ),
+        render: (row) => <Badge status={mapBadgeStatus(row.status)} dot />,
       },
       {
-        key: "studentCount",
-        label: "Student Count",
+        key: "bookingCount",
+        label: "Booking Count",
         render: (row) => (
           <span className="font-geist-label font-bold text-white">
-            {row.studentCount}
+            {row.bookingCount}
           </span>
         ),
       },
@@ -184,7 +210,7 @@ export default function TrainerMyClassesPage() {
     []
   );
 
-  if (loading) {
+  if (sessionPending || loading) {
     return <LoadingSkeleton variant="page" />;
   }
 
@@ -200,7 +226,7 @@ export default function TrainerMyClassesPage() {
           <div>
             <h2 className={dashboardClasses.pageTitle}>My Classes</h2>
             <p className={dashboardClasses.pageSubtitle}>
-              Manage your class catalog, students, and publishing status.
+              Classes you created in MongoDB — filtered by your trainer account.
             </p>
           </div>
           <Link href="/dashboard/trainer/add-class" className={dashboardClasses.btnPrimary}>
@@ -218,17 +244,17 @@ export default function TrainerMyClassesPage() {
         />
       </motion.div>
 
-      {/* View Students Modal */}
       <Modal
         isOpen={studentsModalOpen}
         onClose={() => {
           setStudentsModalOpen(false);
           setSelectedClass(null);
+          setStudents([]);
         }}
         title="Enrolled Students"
         description={
           selectedClass
-            ? `${selectedClass.className} · ${selectedClass.studentCount} students`
+            ? `${selectedClass.className} · ${selectedClass.bookingCount} booking(s)`
             : ""
         }
         size="lg"
@@ -238,6 +264,7 @@ export default function TrainerMyClassesPage() {
             onClick={() => {
               setStudentsModalOpen(false);
               setSelectedClass(null);
+              setStudents([]);
             }}
             className={dashboardClasses.btnSecondary}
           >
@@ -245,9 +272,18 @@ export default function TrainerMyClassesPage() {
           </button>
         }
       >
-        {selectedClass?.students?.length ? (
+        {studentsLoading ? (
           <div className="space-y-3">
-            {selectedClass.students.map((student) => (
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-16 rounded-xl bg-surface-container-low/60 animate-pulse"
+              />
+            ))}
+          </div>
+        ) : students.length ? (
+          <div className="space-y-3">
+            {students.map((student) => (
               <div
                 key={student.id}
                 className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl bg-surface-container-low/60 border border-primary-container/15 p-4"
@@ -278,8 +314,10 @@ export default function TrainerMyClassesPage() {
       <ConfirmationDialog
         isOpen={deleteOpen}
         onClose={() => {
-          setDeleteOpen(false);
-          setDeleteTarget(null);
+          if (!deleting) {
+            setDeleteOpen(false);
+            setDeleteTarget(null);
+          }
         }}
         onConfirm={handleDeleteConfirm}
         variant="danger"
@@ -289,7 +327,7 @@ export default function TrainerMyClassesPage() {
             ? `Are you sure you want to delete "${deleteTarget.className}"? This action cannot be undone.`
             : "Are you sure you want to delete this class?"
         }
-        confirmLabel="Delete"
+        confirmLabel={deleting ? "Deleting..." : "Delete"}
       />
     </>
   );

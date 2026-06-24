@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import { CircleCheck, CircleXmark, TrashBin } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
+import { useSession } from "@/lib/auth-client";
+import { adminApi } from "@/lib/dashboard/api";
+import { syncBackendToken, unwrap } from "@/lib/publicApi";
 import DataTable from "@/components/dashboard/ui/DataTable";
 import Badge from "@/components/dashboard/ui/Badge";
 import ConfirmationDialog from "@/components/dashboard/ui/ConfirmationDialog";
@@ -15,81 +19,96 @@ import {
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-const INITIAL_CLASSES = [
-  {
-    id: "c-1",
-    className: "HIIT Power Hour",
-    trainer: "Marcus Reed",
-    status: "pending",
-    category: "HIIT",
-  },
-  {
-    id: "c-2",
-    className: "Morning Yoga Flow",
-    trainer: "Sarah Chen",
-    status: "published",
-    category: "Yoga",
-  },
-  {
-    id: "c-3",
-    className: "Spin & Burn",
-    trainer: "Emily Torres",
-    status: "pending",
-    category: "Cycling",
-  },
-  {
-    id: "c-4",
-    className: "Strength Foundations",
-    trainer: "Alex Johnson",
-    status: "rejected",
-    category: "Strength",
-  },
-  {
-    id: "c-5",
-    className: "Boxing Basics",
-    trainer: "Chris Morgan",
-    status: "published",
-    category: "Boxing",
-  },
-];
-
-async function fetchClasses() {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return INITIAL_CLASSES;
+function mapBadgeStatus(status) {
+  if (status === "published" || status === "approved") return "approved";
+  if (status === "rejected") return "rejected";
+  if (status === "pending") return "pending";
+  return "draft";
 }
 
-async function updateClassStatus(id, status) {
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  return { success: true, id, status };
+function mapClass(item) {
+  return {
+    id: item.id,
+    className: item.className,
+    trainer: item.trainer || item.trainerName || "Unknown Trainer",
+    category: item.category,
+    status: item.status,
+    image: item.image,
+  };
 }
 
-async function deleteClass(id) {
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  return { success: true, id };
+function ClassThumbnail({ src, alt }) {
+  const isLocal = src?.startsWith("/");
+
+  if (isLocal && src) {
+    return (
+      <Image
+        src={src}
+        alt={alt}
+        width={48}
+        height={48}
+        className="h-12 w-12 rounded-lg object-cover border border-primary-container/20"
+      />
+    );
+  }
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className="h-12 w-12 rounded-lg object-cover border border-primary-container/20"
+      />
+    );
+  }
+
+  return (
+    <div className="h-12 w-12 rounded-lg bg-primary-container/20 border border-primary-container/20 flex items-center justify-center text-xs text-on-surface-variant">
+      N/A
+    </div>
+  );
 }
 
 export default function AdminManageClassesPage() {
+  const { data: session, isPending: sessionPending } = useSession();
   const [loading, setLoading] = useState(true);
   const [classes, setClasses] = useState([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
   const [confirmTarget, setConfirmTarget] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchClasses = useCallback(async () => {
+    if (!session?.user) {
+      if (!sessionPending) {
+        setClasses([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await syncBackendToken(session.user);
+
+      const response = await adminApi.getClasses();
+      const data = unwrap(response);
+      const classData = (data?.classes || []).map(mapClass);
+
+      console.log("Admin classes from DB:", classData);
+
+      setClasses(classData);
+    } catch (error) {
+      console.error("Failed to load admin classes:", error);
+      setClasses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user, sessionPending]);
 
   useEffect(() => {
-    let mounted = true;
-
-    fetchClasses()
-      .then((data) => {
-        if (mounted) setClasses(data);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    fetchClasses();
+  }, [fetchClasses]);
 
   const openConfirm = (action, row) => {
     setConfirmAction(action);
@@ -100,26 +119,48 @@ export default function AdminManageClassesPage() {
   const handleConfirm = async () => {
     if (!confirmTarget || !confirmAction) return;
 
-    if (confirmAction === "delete") {
-      await deleteClass(confirmTarget.id);
-      setClasses((prev) => prev.filter((c) => c.id !== confirmTarget.id));
-      toast.success(`"${confirmTarget.className}" deleted successfully.`);
-      return;
+    setSubmitting(true);
+    try {
+      if (session?.user) {
+        await syncBackendToken(session.user);
+      }
+
+      if (confirmAction === "delete") {
+        await adminApi.deleteClass(confirmTarget.id);
+        setClasses((prev) => prev.filter((c) => c.id !== confirmTarget.id));
+        toast.success(`"${confirmTarget.className}" deleted successfully.`);
+      } else if (confirmAction === "approve") {
+        const response = await adminApi.approveClass(confirmTarget.id);
+        const data = unwrap(response);
+        const updated = mapClass(data?.class || {});
+
+        console.log("Class approved:", updated);
+
+        setClasses((prev) =>
+          prev.map((c) => (c.id === confirmTarget.id ? { ...c, ...updated } : c))
+        );
+        toast.success(`"${confirmTarget.className}" approved successfully.`);
+      } else if (confirmAction === "reject") {
+        const response = await adminApi.rejectClass(confirmTarget.id);
+        const data = unwrap(response);
+        const updated = mapClass(data?.class || {});
+
+        console.log("Class rejected:", updated);
+
+        setClasses((prev) =>
+          prev.map((c) => (c.id === confirmTarget.id ? { ...c, ...updated } : c))
+        );
+        toast.success(`"${confirmTarget.className}" rejected.`);
+      }
+
+      setConfirmOpen(false);
+      setConfirmAction(null);
+      setConfirmTarget(null);
+    } catch (error) {
+      console.error("Class action failed:", error);
+    } finally {
+      setSubmitting(false);
     }
-
-    const newStatus = confirmAction === "approve" ? "published" : "rejected";
-    await updateClassStatus(confirmTarget.id, newStatus);
-    setClasses((prev) =>
-      prev.map((c) =>
-        c.id === confirmTarget.id ? { ...c, status: newStatus } : c
-      )
-    );
-
-    toast.success(
-      confirmAction === "approve"
-        ? `"${confirmTarget.className}" approved and published.`
-        : `"${confirmTarget.className}" rejected.`
-    );
   };
 
   const getConfirmConfig = () => {
@@ -130,9 +171,9 @@ export default function AdminManageClassesPage() {
     if (confirmAction === "approve") {
       return {
         title: "Approve this class?",
-        message: `Publish "${confirmTarget.className}" by ${confirmTarget.trainer} to the platform?`,
+        message: `Publish "${confirmTarget.className}" by ${confirmTarget.trainer} to /all-classes?`,
         variant: "success",
-        label: "Approve",
+        label: submitting ? "Approving..." : "Approve",
       };
     }
 
@@ -141,7 +182,7 @@ export default function AdminManageClassesPage() {
         title: "Reject this class?",
         message: `Reject "${confirmTarget.className}" by ${confirmTarget.trainer}? It will not be visible to users.`,
         variant: "reject",
-        label: "Reject",
+        label: submitting ? "Rejecting..." : "Reject",
       };
     }
 
@@ -149,7 +190,7 @@ export default function AdminManageClassesPage() {
       title: "Delete this class?",
       message: `Permanently delete "${confirmTarget.className}"? This action cannot be undone.`,
       variant: "danger",
-      label: "Delete",
+      label: submitting ? "Deleting..." : "Delete",
     };
   };
 
@@ -158,31 +199,35 @@ export default function AdminManageClassesPage() {
   const columns = useMemo(
     () => [
       {
+        key: "image",
+        label: "Image",
+        render: (row) => (
+          <ClassThumbnail src={row.image} alt={row.className} />
+        ),
+      },
+      {
         key: "className",
         label: "Class Name",
         render: (row) => (
-          <div>
-            <span className="font-semibold text-white block">{row.className}</span>
-            <span className="font-hanken text-xs text-on-surface-variant">{row.category}</span>
-          </div>
+          <span className="font-semibold text-white">{row.className}</span>
         ),
       },
-      { key: "trainer", label: "Trainer" },
+      {
+        key: "trainer",
+        label: "Trainer Name",
+        render: (row) => (
+          <span className="font-hanken text-sm text-on-surface">{row.trainer}</span>
+        ),
+      },
+      {
+        key: "category",
+        label: "Category",
+        render: (row) => <Badge variant="primary">{row.category}</Badge>,
+      },
       {
         key: "status",
         label: "Status",
-        render: (row) => (
-          <Badge
-            status={
-              row.status === "published"
-                ? "approved"
-                : row.status === "pending"
-                  ? "pending"
-                  : "rejected"
-            }
-            dot
-          />
-        ),
+        render: (row) => <Badge status={mapBadgeStatus(row.status)} dot />,
       },
       {
         key: "actions",
@@ -212,7 +257,10 @@ export default function AdminManageClassesPage() {
 
             <button
               type="button"
-              className={cn(dashboardClasses.btnGhost, "px-3 py-2 text-xs text-error hover:bg-error/10")}
+              className={cn(
+                dashboardClasses.btnGhost,
+                "px-3 py-2 text-xs text-error hover:bg-error/10"
+              )}
               onClick={() => openConfirm("delete", row)}
             >
               <Icon icon={TrashBin} size={14} />
@@ -225,7 +273,7 @@ export default function AdminManageClassesPage() {
     []
   );
 
-  if (loading) {
+  if (sessionPending || loading) {
     return <LoadingSkeleton variant="page" />;
   }
 
@@ -240,7 +288,7 @@ export default function AdminManageClassesPage() {
         <header>
           <h2 className={dashboardClasses.pageTitle}>Manage Classes</h2>
           <p className={dashboardClasses.pageSubtitle}>
-            Approve, reject, or remove classes submitted by trainers.
+            All trainer classes from MongoDB — approve, reject, or delete.
           </p>
         </header>
 
@@ -257,9 +305,11 @@ export default function AdminManageClassesPage() {
       <ConfirmationDialog
         isOpen={confirmOpen}
         onClose={() => {
-          setConfirmOpen(false);
-          setConfirmAction(null);
-          setConfirmTarget(null);
+          if (!submitting) {
+            setConfirmOpen(false);
+            setConfirmAction(null);
+            setConfirmTarget(null);
+          }
         }}
         onConfirm={handleConfirm}
         variant={confirmConfig.variant}
