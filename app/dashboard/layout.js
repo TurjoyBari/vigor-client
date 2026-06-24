@@ -1,28 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { useSession } from "@/lib/auth-client";
 import Sidebar from "@/components/dashboard/Sidebar";
 import DashboardNavbar from "@/components/dashboard/DashboardNavbar";
 import RoleGuard from "@/components/dashboard/RoleGuard";
 import LoadingSkeleton from "@/components/dashboard/ui/LoadingSkeleton";
-import { DASHBOARD_ROLES } from "@/lib/dashboard/navConfig";
+import { useVigorRole } from "@/lib/hooks/useVigorRole";
 import { cn, dashboardClasses } from "@/lib/dashboard/theme";
 
 export default function DashboardLayout({ children }) {
-  const { data: session, isPending } = useSession();
+  const { user, role, loading } = useVigorRole();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
-
-  const user = session?.user;
-  const role = DASHBOARD_ROLES.includes(user?.role) ? user.role : "user";
 
   return (
     <RoleGuard>
       {/* Full-viewport shell — sits above marketing Navbar/Footer */}
       <div className={cn(dashboardClasses.shell, "fixed inset-0 z-[60]")}>
-        {isPending ? (
+        {loading ? (
           <div className="flex-1 p-6 lg:p-8">
             <LoadingSkeleton variant="page" />
           </div>

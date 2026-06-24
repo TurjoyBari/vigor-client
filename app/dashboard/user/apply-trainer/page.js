@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
@@ -7,6 +8,7 @@ import { toast } from "react-toastify";
 import { GraduationCap, ArrowRight } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import { useSession } from "@/lib/auth-client";
+import publicApi, { syncBackendToken, unwrap } from "@/lib/publicApi";
 import {
   cn,
   dashboardClasses,
@@ -26,19 +28,15 @@ const SPECIALTY_OPTIONS = [
   "Other",
 ];
 
-async function submitTrainerApplication(payload) {
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  return { success: true, applicationId: `app-${Date.now()}`, ...payload };
-}
-
 export default function ApplyTrainerPage() {
   const router = useRouter();
   const { data: session } = useSession();
+  const [submitting, setSubmitting] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm({
     defaultValues: {
       experience: "",
@@ -53,6 +51,12 @@ export default function ApplyTrainerPage() {
   };
 
   const onSubmit = async (data) => {
+    if (!session?.user) {
+      toast.info("Please log in to submit an application.");
+      router.push("/login?redirect=/dashboard/user/apply-trainer");
+      return;
+    }
+
     const specialty =
       data.specialty === "Other"
         ? data.customSpecialty.trim()
@@ -63,17 +67,37 @@ export default function ApplyTrainerPage() {
       return;
     }
 
+    setSubmitting(true);
     try {
-      await submitTrainerApplication({
-        userId: session?.user?.id,
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user || session.user;
+
+      console.log("Current User:", vigorUser);
+
+      const response = await publicApi.trainerApplications.submit({
         experience: data.experience.trim(),
         specialty,
       });
 
+      const result = unwrap(response);
+      const application = result?.application;
+
+      console.log("Application Submitted:", application);
+
       toast.success("Trainer application submitted successfully!");
       setTimeout(() => router.push("/dashboard/user"), 1500);
-    } catch {
-      toast.error("Failed to submit application. Please try again.");
+    } catch (error) {
+      console.error("Failed to submit trainer application:", error);
+      const status = error.response?.status;
+      const message = error.response?.data?.message;
+
+      if (!status || status === 401) {
+        toast.error(message || "Please log in again and retry your application.");
+      } else if (status !== 403 && status !== 409 && status !== 400) {
+        toast.error(message || "Failed to submit application. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -139,7 +163,6 @@ export default function ApplyTrainerPage() {
           </label>
           <select
             id="specialty"
-            defaultValue=""
             className={dashboardClasses.select}
             {...register("specialty", {
               required: "Please select a specialty",
@@ -198,11 +221,11 @@ export default function ApplyTrainerPage() {
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={submitting}
           className={cn(dashboardClasses.btnPrimary, "w-full py-3.5")}
         >
-          {isSubmitting ? "Submitting..." : "Submit Application"}
-          {!isSubmitting && <Icon icon={ArrowRight} size={18} />}
+          {submitting ? "Submitting..." : "Submit Application"}
+          {!submitting && <Icon icon={ArrowRight} size={18} />}
         </button>
       </form>
     </motion.div>

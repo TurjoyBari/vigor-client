@@ -1,71 +1,47 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import { Eye, CircleCheck, CircleXmark } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
+import { useSession } from "@/lib/auth-client";
+import { adminApi } from "@/lib/dashboard/api";
 import DataTable from "@/components/dashboard/ui/DataTable";
 import Modal from "@/components/dashboard/ui/Modal";
 import Badge from "@/components/dashboard/ui/Badge";
 import LoadingSkeleton from "@/components/dashboard/ui/LoadingSkeleton";
+import { syncBackendToken, unwrap } from "@/lib/publicApi";
 import {
   cn,
   dashboardClasses,
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-const INITIAL_APPLICATIONS = [
-  {
-    id: "app-1",
-    name: "Alex Johnson",
-    email: "alex@example.com",
-    experience: "4 years coaching HIIT and strength training at FitCore Gym. NASM certified.",
-    specialty: "HIIT, Strength Training",
-    status: "pending",
-    submittedAt: "2026-06-15",
-  },
-  {
-    id: "app-2",
-    name: "Emily Torres",
-    email: "emily@example.com",
-    experience: "6 years teaching spin and cycling classes. ACE group fitness certified.",
-    specialty: "Cycling",
-    status: "pending",
-    submittedAt: "2026-06-14",
-  },
-  {
-    id: "app-3",
-    name: "Jordan Smith",
-    email: "jordan@example.com",
-    experience: "2 years yoga instruction, 200-hour RYT certification.",
-    specialty: "Yoga",
-    status: "approved",
-    submittedAt: "2026-06-10",
-  },
-  {
-    id: "app-4",
-    name: "Chris Morgan",
-    email: "chris@example.com",
-    experience: "1 year personal training experience.",
-    specialty: "General Fitness",
-    status: "rejected",
-    submittedAt: "2026-06-08",
-    adminFeedback: "Please gain more coaching experience and reapply with certifications.",
-  },
-];
-
-async function fetchApplications() {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return INITIAL_APPLICATIONS;
+function formatSubmittedAt(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
-async function reviewApplication(id, decision, feedback = "") {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return { success: true, id, decision, feedback };
+function mapApplication(app) {
+  return {
+    id: app.id,
+    name: app.applicantName || app.name || "Unknown",
+    email: app.applicantEmail || app.email || "",
+    experience: app.experience || "",
+    specialty: app.specialty || "",
+    status: app.status,
+    submittedAt: formatSubmittedAt(app.createdAt || app.submittedAt),
+    adminFeedback: app.feedback || app.adminFeedback || "",
+  };
 }
 
 export default function AdminAppliedTrainersPage() {
+  const { data: session, isPending: sessionPending } = useSession();
   const [loading, setLoading] = useState(true);
   const [applications, setApplications] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -73,21 +49,37 @@ export default function AdminAppliedTrainersPage() {
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const fetchApplications = useCallback(async () => {
+    if (!session?.user) {
+      if (!sessionPending) {
+        setApplications([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await syncBackendToken(session.user);
+
+      const response = await adminApi.getTrainerApplications();
+      const data = unwrap(response);
+      const applicationsFromDb = (data?.applications || []).map(mapApplication);
+
+      console.log("Trainer Applications API Response:", applicationsFromDb);
+
+      setApplications(applicationsFromDb);
+    } catch (error) {
+      console.error("Failed to load trainer applications:", error);
+      setApplications([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user, sessionPending]);
+
   useEffect(() => {
-    let mounted = true;
-
-    fetchApplications()
-      .then((data) => {
-        if (mounted) setApplications(data);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    fetchApplications();
+  }, [fetchApplications]);
 
   const openDetails = (app) => {
     setSelectedApp(app);
@@ -112,15 +104,30 @@ export default function AdminAppliedTrainersPage() {
 
     try {
       setSubmitting(true);
-      await reviewApplication(selectedApp.id, decision, feedback.trim());
+
+      const response =
+        decision === "approved"
+          ? await adminApi.approveTrainerApplication(selectedApp.id)
+          : await adminApi.rejectTrainerApplication(selectedApp.id, feedback.trim());
+
+      const data = unwrap(response);
+      const updated = mapApplication(data?.application || {});
+
+      if (decision === "approved") {
+        console.log("Application Approved:", selectedApp.id);
+        console.log("User Role Updated:", updated.userId || selectedApp.userId);
+      } else {
+        console.log("Application Rejected:", selectedApp.id);
+      }
 
       setApplications((prev) =>
         prev.map((app) =>
           app.id === selectedApp.id
             ? {
                 ...app,
-                status: decision,
-                adminFeedback: decision === "rejected" ? feedback.trim() : app.adminFeedback,
+                status: updated.status || decision,
+                adminFeedback:
+                  decision === "rejected" ? feedback.trim() : app.adminFeedback,
               }
             : app
         )
@@ -132,7 +139,8 @@ export default function AdminAppliedTrainersPage() {
           : `${selectedApp.name}'s application rejected.`
       );
       closeModal();
-    } catch {
+    } catch (error) {
+      console.error("Failed to process application:", error);
       toast.error("Failed to process application. Please try again.");
       setSubmitting(false);
     }
@@ -142,7 +150,7 @@ export default function AdminAppliedTrainersPage() {
     () => [
       {
         key: "name",
-        label: "Name",
+        label: "Applicant Name",
         render: (row) => (
           <div>
             <span className="font-semibold text-white block">{row.name}</span>
@@ -170,6 +178,13 @@ export default function AdminAppliedTrainersPage() {
         render: (row) => <Badge status={row.status} dot />,
       },
       {
+        key: "submittedAt",
+        label: "Submitted Date",
+        render: (row) => (
+          <span className="text-on-surface-variant text-sm">{row.submittedAt}</span>
+        ),
+      },
+      {
         key: "actions",
         label: "Actions",
         render: (row) => (
@@ -187,7 +202,7 @@ export default function AdminAppliedTrainersPage() {
     []
   );
 
-  if (loading) {
+  if (sessionPending || loading) {
     return <LoadingSkeleton variant="page" />;
   }
 
@@ -204,7 +219,7 @@ export default function AdminAppliedTrainersPage() {
         <header>
           <h2 className={dashboardClasses.pageTitle}>Applied Trainers</h2>
           <p className={dashboardClasses.pageSubtitle}>
-            Review trainer applications, provide feedback, and approve or reject candidates.
+            Review trainer applications from the MongoDB trainerApplications collection.
           </p>
         </header>
 

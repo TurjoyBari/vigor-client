@@ -3,39 +3,27 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "react-toastify";
-import { useSession } from "@/lib/auth-client";
 import LoadingSkeleton from "@/components/dashboard/ui/LoadingSkeleton";
+import { useVigorRole } from "@/lib/hooks/useVigorRole";
 import {
   canAccessDashboardRoute,
   getRoleDashboardPath,
-  DASHBOARD_ROLES,
 } from "@/lib/dashboard/navConfig";
 
 /**
- * Protects dashboard routes with Better Auth session + role checks.
- *
- * @example
- * // In app/dashboard/layout.js
- * <RoleGuard>{children}</RoleGuard>
- *
- * @example
- * // Restrict to specific roles
- * <RoleGuard allowedRoles={["admin"]}>{children}</RoleGuard>
+ * Protects dashboard routes using VIGOR MongoDB role (not stale Better Auth session).
  */
 export default function RoleGuard({
   children,
   allowedRoles,
   fallback = null,
 }) {
-  const { data: session, isPending } = useSession();
+  const { user, role, loading } = useVigorRole();
   const pathname = usePathname();
   const router = useRouter();
 
-  const user = session?.user;
-  const userRole = user?.role;
-
   useEffect(() => {
-    if (isPending) return;
+    if (loading) return;
 
     if (!user) {
       toast.error("Please sign in to access the dashboard.");
@@ -49,21 +37,19 @@ export default function RoleGuard({
       return;
     }
 
-    const normalizedRole = DASHBOARD_ROLES.includes(userRole) ? userRole : "user";
-
-    if (!canAccessDashboardRoute(normalizedRole, pathname)) {
+    if (!canAccessDashboardRoute(role, pathname)) {
       toast.error("You do not have permission to access that page.");
-      router.replace(getRoleDashboardPath(normalizedRole));
+      router.replace(getRoleDashboardPath(role));
       return;
     }
 
-    if (allowedRoles?.length && !allowedRoles.includes(normalizedRole)) {
+    if (allowedRoles?.length && !allowedRoles.includes(role)) {
       toast.error("This area is restricted to authorized roles only.");
-      router.replace(getRoleDashboardPath(normalizedRole));
+      router.replace(getRoleDashboardPath(role));
     }
-  }, [isPending, user, userRole, pathname, router, allowedRoles]);
+  }, [loading, user, role, pathname, router, allowedRoles]);
 
-  if (isPending) {
+  if (loading) {
     return fallback || <LoadingSkeleton variant="page" />;
   }
 
@@ -75,13 +61,11 @@ export default function RoleGuard({
     return fallback || <LoadingSkeleton variant="page" />;
   }
 
-  const normalizedRole = DASHBOARD_ROLES.includes(userRole) ? userRole : "user";
-
-  if (!canAccessDashboardRoute(normalizedRole, pathname)) {
+  if (!canAccessDashboardRoute(role, pathname)) {
     return fallback || <LoadingSkeleton variant="page" />;
   }
 
-  if (allowedRoles?.length && !allowedRoles.includes(normalizedRole)) {
+  if (allowedRoles?.length && !allowedRoles.includes(role)) {
     return fallback || <LoadingSkeleton variant="page" />;
   }
 

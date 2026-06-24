@@ -1,21 +1,56 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Calendar, Star, GraduationCap, ArrowRight } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import { useSession } from "@/lib/auth-client";
+import { toast } from "react-toastify";
+import { userApi } from "@/lib/dashboard/api";
 import StatsCard from "@/components/dashboard/ui/StatsCard";
 import Badge from "@/components/dashboard/ui/Badge";
 import LoadingSkeleton from "@/components/dashboard/ui/LoadingSkeleton";
 import { TRAINER_APPLICATION_STATUS } from "@/lib/dashboard/navConfig";
+import publicApi, { syncBackendToken, unwrap } from "@/lib/publicApi";
 import {
   cn,
   dashboardClasses,
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
+
+function formatSubmittedAt(value) {
+  if (!value) return null;
+  return new Date(value).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function mapTrainerApplication(application) {
+  if (!application) {
+    return {
+      status: TRAINER_APPLICATION_STATUS.NONE,
+      applicantName: "",
+      experience: "",
+      specialty: "",
+      adminFeedback: "",
+      submittedAt: null,
+    };
+  }
+
+  return {
+    status: application.status,
+    applicantName: application.applicantName || "",
+    experience: application.experience || "",
+    specialty: application.specialty || "",
+    adminFeedback: application.feedback || application.adminFeedback || "",
+    submittedAt: formatSubmittedAt(application.createdAt || application.submittedAt),
+  };
+}
 
 function UserAvatar({ user, size = 80 }) {
   if (
@@ -55,57 +90,102 @@ function UserAvatar({ user, size = 80 }) {
   );
 }
 
-async function fetchUserOverview() {
-  await new Promise((resolve) => setTimeout(resolve, 600));
-
-  return {
-    stats: {
-      bookedClasses: 5,
-      favorites: 3,
-    },
-    trainerApplication: {
-      status: TRAINER_APPLICATION_STATUS.PENDING,
-      experience: "3 years coaching HIIT and strength training",
-      specialty: "HIIT, Strength Training",
-      adminFeedback: "",
-      submittedAt: "2026-06-15",
-    },
-  };
-}
-
 export default function UserDashboardPage() {
-  const { data: session } = useSession();
+  const router = useRouter();
+  const { data: session, isPending: sessionPending } = useSession();
   const user = session?.user;
 
   const [loading, setLoading] = useState(true);
-  const [overview, setOverview] = useState(null);
+  const [navigatingToTrainer, setNavigatingToTrainer] = useState(false);
+  const [vigorUser, setVigorUser] = useState(null);
+  const [stats, setStats] = useState({ bookedClasses: 0, favorites: 0 });
+  const [trainerApplication, setTrainerApplication] = useState(
+    mapTrainerApplication(null)
+  );
+
+  const fetchDashboard = useCallback(async () => {
+    if (!session?.user) {
+      if (!sessionPending) {
+        setStats({ bookedClasses: 0, favorites: 0 });
+        setTrainerApplication(mapTrainerApplication(null));
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user;
+
+      if (!vigorUser?.id) {
+        throw new Error("VIGOR user id missing after auth sync");
+      }
+
+      console.log("Current User:", vigorUser);
+      setVigorUser(vigorUser);
+
+      const overviewRes = await userApi.getOverview();
+      const overviewData = unwrap(overviewRes);
+
+      console.log("User Overview API Response:", overviewData);
+
+      setStats({
+        bookedClasses: overviewData?.stats?.bookedClasses ?? 0,
+        favorites: overviewData?.stats?.favorites ?? 0,
+      });
+      setTrainerApplication(
+        mapTrainerApplication(overviewData?.trainerApplication)
+      );
+    } catch (error) {
+      console.error("Failed to load user dashboard:", error);
+      setStats({ bookedClasses: 0, favorites: 0 });
+      setTrainerApplication(mapTrainerApplication(null));
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user, sessionPending]);
 
   useEffect(() => {
-    let mounted = true;
+    fetchDashboard();
+  }, [fetchDashboard]);
 
-    fetchUserOverview()
-      .then((data) => {
-        if (mounted) setOverview(data);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
+  const handleGoToTrainerDashboard = async () => {
+    if (!session?.user) {
+      toast.info("Please log in to continue.");
+      router.push("/login?redirect=/dashboard/trainer");
+      return;
+    }
 
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    setNavigatingToTrainer(true);
+    try {
+      const authData = await syncBackendToken(session.user);
+      const syncedRole = authData?.user?.role;
 
-  if (loading) {
+      if (syncedRole !== "trainer" && syncedRole !== "admin") {
+        toast.error(
+          "Trainer access is not active yet. Please refresh and try again."
+        );
+        return;
+      }
+
+      router.push("/dashboard/trainer");
+    } catch (error) {
+      console.error("Failed to open trainer dashboard:", error);
+      toast.error("Could not open trainer dashboard. Please try again.");
+    } finally {
+      setNavigatingToTrainer(false);
+    }
+  };
+
+  if (sessionPending || loading) {
     return <LoadingSkeleton variant="page" />;
   }
-
-  const { stats, trainerApplication } = overview;
   const isRejected =
     trainerApplication.status === TRAINER_APPLICATION_STATUS.REJECTED;
   const isApproved =
     trainerApplication.status === TRAINER_APPLICATION_STATUS.APPROVED;
-  const isPending =
+  const isApplicationPending =
     trainerApplication.status === TRAINER_APPLICATION_STATUS.PENDING;
   const hasApplication =
     trainerApplication.status !== TRAINER_APPLICATION_STATUS.NONE;
@@ -134,7 +214,6 @@ export default function UserDashboardPage() {
           icon={Calendar}
           accent="primary"
           index={0}
-          trend={{ value: 12, label: "vs last month" }}
         />
         <StatsCard
           title="Total Favorites"
@@ -142,7 +221,6 @@ export default function UserDashboardPage() {
           icon={Star}
           accent="secondary"
           index={1}
-          trend={{ value: 5, label: "saved classes" }}
         />
       </motion.div>
 
@@ -164,7 +242,7 @@ export default function UserDashboardPage() {
               {user?.email}
             </p>
             <div className="mt-3">
-              <Badge role={user?.role || "user"} dot />
+              <Badge role={vigorUser?.role || user?.role || "user"} dot />
             </div>
           </div>
 
@@ -236,7 +314,7 @@ export default function UserDashboardPage() {
                 </div>
               </div>
 
-              {isPending && (
+              {isApplicationPending && (
                 <div className="rounded-xl border border-[#F59E0B]/25 bg-[#F59E0B]/10 p-4">
                   <p className="font-geist-label text-sm font-semibold text-[#F59E0B]">
                     Under Review
@@ -257,13 +335,15 @@ export default function UserDashboardPage() {
                     Your trainer application has been approved. You can now access the
                     trainer dashboard.
                   </p>
-                  <Link
-                    href="/dashboard/trainer"
+                  <button
+                    type="button"
+                    onClick={handleGoToTrainerDashboard}
+                    disabled={navigatingToTrainer}
                     className={cn(dashboardClasses.btnPrimary, "mt-4 inline-flex")}
                   >
-                    Go to Trainer Dashboard
-                    <Icon icon={ArrowRight} size={18} />
-                  </Link>
+                    {navigatingToTrainer ? "Opening..." : "Go to Trainer Dashboard"}
+                    {!navigatingToTrainer && <Icon icon={ArrowRight} size={18} />}
+                  </button>
                 </div>
               )}
 
