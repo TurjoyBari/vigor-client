@@ -7,6 +7,9 @@ import { useForm } from "react-hook-form";
 import { toast } from "react-toastify";
 import { Comment, Picture, ArrowRight, Shield } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
+import { useSession } from "@/lib/auth-client";
+import { adminApi } from "@/lib/dashboard/api";
+import { syncBackendToken, unwrap } from "@/lib/publicApi";
 import { uploadImage } from "@/utils/uploadImage";
 import {
   cn,
@@ -14,20 +17,17 @@ import {
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-async function createAdminForumPost(payload) {
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  return { success: true, id: `admin-post-${Date.now()}`, ...payload };
-}
-
 export default function AdminAddForumPostPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [imagePreview, setImagePreview] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm({
     defaultValues: {
       title: "",
@@ -41,36 +41,71 @@ export default function AdminAddForumPostPage() {
   };
 
   const onSubmit = async (data) => {
-    let imageUrl = null;
+    console.log("Forum form submitted");
 
-    if (data.image?.[0]) {
-      try {
-        setUploading(true);
-        imageUrl = await uploadImage(data.image[0]);
-      } catch {
-        toast.error("Failed to upload post image.");
-        return;
-      } finally {
-        setUploading(false);
-      }
+    if (!session?.user) {
+      toast.info("Please log in to publish an announcement.");
+      router.push("/login?redirect=/dashboard/admin/add-forum-post");
+      return;
     }
 
+    setSubmitting(true);
+    let imageUrl = null;
+
     try {
-      await createAdminForumPost({
+      if (data.image?.[0]) {
+        try {
+          setUploading(true);
+          imageUrl = await uploadImage(data.image[0]);
+          if (!imageUrl) {
+            toast.error("Failed to upload post image.");
+            return;
+          }
+        } catch (error) {
+          console.error("Forum image upload failed:", error);
+          toast.error("Failed to upload post image.");
+          return;
+        } finally {
+          setUploading(false);
+        }
+      }
+
+      const formData = {
         title: data.title.trim(),
         description: data.description.trim(),
         image: imageUrl,
-        authorRole: "admin",
-      });
+      };
+
+      console.log(formData);
+
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user;
+
+      console.log("Current admin:", vigorUser);
+
+      if (vigorUser?.role !== "admin") {
+        toast.error("Only admins can publish official announcements.");
+        return;
+      }
+
+      const response = await adminApi.createForumPost(formData);
+      const result = unwrap(response);
+      const post = result?.post;
+
+      console.log("Forum post created in DB:", post);
 
       toast.success("Official announcement published successfully!");
       setTimeout(() => router.push("/dashboard/admin/forum-manage"), 1500);
-    } catch {
+    } catch (error) {
+      console.error("Failed to publish forum post:", error);
+      console.log(error.response);
       toast.error("Failed to publish post. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const isBusy = isSubmitting || uploading;
+  const isBusy = submitting || uploading;
 
   return (
     <motion.div
@@ -189,7 +224,7 @@ export default function AdminAddForumPostPage() {
           disabled={isBusy}
           className={cn(dashboardClasses.btnPrimary, "w-full py-3.5")}
         >
-          {uploading ? "Uploading image..." : isSubmitting ? "Publishing..." : "Publish Announcement"}
+          {uploading ? "Uploading image..." : submitting ? "Publishing..." : "Publish Announcement"}
           {!isBusy && <Icon icon={ArrowRight} size={18} />}
         </button>
       </form>

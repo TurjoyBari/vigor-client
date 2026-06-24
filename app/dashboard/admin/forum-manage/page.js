@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import { Comment, TrashBin, Plus, LayoutList, LayoutColumns3 } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
+import { useSession } from "@/lib/auth-client";
+import { adminApi } from "@/lib/dashboard/api";
+import { syncBackendToken, unwrap } from "@/lib/publicApi";
 import DataTable from "@/components/dashboard/ui/DataTable";
 import Badge from "@/components/dashboard/ui/Badge";
 import EmptyState from "@/components/dashboard/ui/EmptyState";
@@ -18,51 +21,89 @@ import {
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-const INITIAL_POSTS = [
-  {
-    id: "fp-1",
-    title: "Platform Maintenance — June 22",
-    author: "Admin User",
-    authorRole: "admin",
-    image:
-      "https://lh3.googleusercontent.com/aida/AP1WRLtCJNd7GGrZLAAM1Rl2NJf6X5sYijONIH94EItgwomRJU0NZhimF3Ghp-uURYwM7c0TMXr5543_WnhEAxKBzZDDwPN9AzkDL4Om-n1mHl5gB4w3diT_1yZiKZuoovGaOQo1pBQg2mnQCe9eJTGAsu9WwliavpvJl6rVISYTQhDrnU5TXTLeLjI4d9R04s0195ky9wMIA-LYNrq63370ug59nC-smrdSYMwvYsKw89BNFb12HXRJdUkC8_0",
-    createdAt: "2026-06-18",
-  },
-  {
-    id: "fp-2",
-    title: "5 Recovery Tips After High-Intensity Training",
-    author: "Marcus Reed",
-    authorRole: "trainer",
-    image:
-      "https://lh3.googleusercontent.com/aida/AP1WRLsa8lsZMsP7-3wJ5w20PwFIaHHIGF2OFs-itquo_S9XLclfKE7rP9-4b1t4-4IiW4PAETKHAWi-L-9YpWO9vQATetII1uuQV6wXmj5TEoerRpse8iIhcoxdy2WUX7adf_gnp93q_E9AwwN08gweI5gaOauskdSmIPSf9W9c_W9btdUOsO2iC-GgrL2RyZ6kl_Rl5hmpQLgGUHotz4t0HowIGQ1rq7n7ay38ofK5vQnAHLUzseNu7qoj2A",
-    createdAt: "2026-06-15",
-  },
-  {
-    id: "fp-3",
-    title: "How to Build Consistency in Your Fitness Routine",
-    author: "Sarah Chen",
-    authorRole: "trainer",
-    image: null,
-    createdAt: "2026-06-12",
-  },
-  {
-    id: "fp-4",
-    title: "Welcome to VIGOR Community Forum!",
-    author: "Admin User",
-    authorRole: "admin",
-    image: null,
-    createdAt: "2026-06-01",
-  },
-];
-
-async function fetchForumPosts() {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return INITIAL_POSTS;
+function formatCreatedAt(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
-async function deleteForumPost(id) {
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  return { success: true, id };
+function mapPost(post) {
+  return {
+    id: post.id,
+    title: post.title || "Untitled",
+    image: post.image || null,
+    author: post.authorName || post.author || post.trainerName || "Unknown",
+    authorRole: post.authorRole || "trainer",
+    likes: post.likes ?? post.likeCount ?? 0,
+    createdAt: formatCreatedAt(post.createdAt),
+  };
+}
+
+function PostThumbnail({ src, alt }) {
+  const isLocal = src?.startsWith("/");
+
+  if (isLocal && src) {
+    return (
+      <Image
+        src={src}
+        alt={alt}
+        width={48}
+        height={48}
+        className="h-12 w-12 rounded-lg object-cover border border-primary-container/20"
+      />
+    );
+  }
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className="h-12 w-12 rounded-lg object-cover border border-primary-container/20"
+      />
+    );
+  }
+
+  return (
+    <div className="h-12 w-12 rounded-lg bg-surface-container-low border border-primary-container/20 flex items-center justify-center">
+      <Icon icon={Comment} size={18} className="text-on-surface-variant" />
+    </div>
+  );
+}
+
+function PostGridImage({ src, alt }) {
+  const isLocal = src?.startsWith("/");
+
+  if (isLocal && src) {
+    return (
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        className="object-cover group-hover:scale-105 transition-transform duration-500"
+        sizes="(max-width: 768px) 100vw, 25vw"
+      />
+    );
+  }
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-full items-center justify-center">
+      <Icon icon={Comment} className="text-on-surface-variant/30" size={40} />
+    </div>
+  );
 }
 
 function PostGridCard({ post, index, onDelete }) {
@@ -79,19 +120,7 @@ function PostGridCard({ post, index, onDelete }) {
       whileHover={{ y: -4 }}
     >
       <div className="relative h-36 w-full overflow-hidden bg-surface-container-low">
-        {post.image ? (
-          <Image
-            src={post.image}
-            alt={post.title}
-            fill
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
-            sizes="(max-width: 768px) 100vw, 25vw"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <Icon icon={Comment} className="text-on-surface-variant/30" size={40} />
-          </div>
-        )}
+        <PostGridImage src={post.image} alt={post.title} />
       </div>
 
       <div className="p-4 space-y-3">
@@ -103,7 +132,11 @@ function PostGridCard({ post, index, onDelete }) {
             </p>
             <Badge role={post.authorRole} size="sm" />
           </div>
+          <span className="font-geist-label text-xs text-on-surface-variant shrink-0">
+            {post.likes} likes
+          </span>
         </div>
+        <p className="font-hanken text-xs text-on-surface-variant">{post.createdAt}</p>
         <button
           type="button"
           onClick={() => onDelete(post)}
@@ -118,78 +151,122 @@ function PostGridCard({ post, index, onDelete }) {
 }
 
 export default function AdminForumManagePage() {
+  const { data: session, isPending: sessionPending } = useSession();
   const [loading, setLoading] = useState(true);
   const [posts, setPosts] = useState([]);
   const [viewMode, setViewMode] = useState("table");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchPosts = useCallback(async () => {
+    if (!session?.user) {
+      if (!sessionPending) {
+        setPosts([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await syncBackendToken(session.user);
+
+      const response = await adminApi.getForumPosts();
+      const data = unwrap(response);
+      const postsFromDb = (data?.posts || []).map(mapPost);
+
+      console.log("Forum posts from DB:", postsFromDb);
+
+      setPosts(postsFromDb);
+    } catch (error) {
+      console.error("Failed to load forum posts:", error);
+      console.log(error.response);
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user, sessionPending]);
 
   useEffect(() => {
-    let mounted = true;
+    fetchPosts();
+  }, [fetchPosts]);
 
-    fetchForumPosts()
-      .then((data) => {
-        if (mounted) setPosts(data);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const closeDeleteDialog = () => {
+    setDeleteOpen(false);
+    setDeleteTarget(null);
+    setSubmitting(false);
+  };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
 
-    await deleteForumPost(deleteTarget.id);
-    setPosts((prev) => prev.filter((p) => p.id !== deleteTarget.id));
-    toast.success("Forum post deleted successfully.");
+    setSubmitting(true);
+    try {
+      if (session?.user) {
+        await syncBackendToken(session.user);
+      }
+
+      await adminApi.deleteForumPost(deleteTarget.id);
+
+      setPosts((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      toast.success("Forum post deleted successfully");
+      closeDeleteDialog();
+    } catch (error) {
+      console.error("Delete forum post failed:", error);
+      console.log(error.response);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const columns = useMemo(
     () => [
       {
-        key: "post",
-        label: "Post",
+        key: "image",
+        label: "Image",
+        render: (row) => <PostThumbnail src={row.image} alt={row.title} />,
+      },
+      {
+        key: "title",
+        label: "Title",
         render: (row) => (
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-surface-container-low">
-              {row.image ? (
-                <Image
-                  src={row.image}
-                  alt={row.title}
-                  fill
-                  className="object-cover"
-                  sizes="48px"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center">
-                  <Icon icon={Comment} size={18} className="text-on-surface-variant" />
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-white truncate">{row.title}</p>
-              <p className="font-hanken text-xs text-on-surface-variant">{row.createdAt}</p>
-            </div>
-          </div>
+          <span className="font-semibold text-white">{row.title}</span>
         ),
       },
       {
         key: "author",
         label: "Author",
         render: (row) => (
-          <div>
-            <p className="text-on-surface">{row.author}</p>
-            <Badge role={row.authorRole} size="sm" />
-          </div>
+          <span className="text-on-surface">{row.author}</span>
+        ),
+      },
+      {
+        key: "authorRole",
+        label: "Role",
+        render: (row) => <Badge role={row.authorRole} size="sm" />,
+      },
+      {
+        key: "likes",
+        label: "Likes",
+        render: (row) => (
+          <span className="font-geist-label text-sm font-bold text-white">
+            {row.likes}
+          </span>
+        ),
+      },
+      {
+        key: "createdAt",
+        label: "Created",
+        render: (row) => (
+          <span className="font-hanken text-sm text-on-surface-variant">
+            {row.createdAt}
+          </span>
         ),
       },
       {
         key: "actions",
-        label: "Actions",
+        label: "Action",
         render: (row) => (
           <button
             type="button"
@@ -224,7 +301,7 @@ export default function AdminForumManagePage() {
           <div>
             <h2 className={dashboardClasses.pageTitle}>Forum Manage</h2>
             <p className={dashboardClasses.pageSubtitle}>
-              Moderate all community forum posts across the platform.
+              All trainer and admin posts from the MongoDB forumPosts collection.
             </p>
           </div>
 
@@ -292,19 +369,12 @@ export default function AdminForumManagePage() {
 
       <ConfirmationDialog
         isOpen={deleteOpen}
-        onClose={() => {
-          setDeleteOpen(false);
-          setDeleteTarget(null);
-        }}
+        onClose={closeDeleteDialog}
         onConfirm={handleDeleteConfirm}
         variant="danger"
         title="Delete forum post?"
-        message={
-          deleteTarget
-            ? `Delete "${deleteTarget.title}" by ${deleteTarget.author}? This cannot be undone.`
-            : "Are you sure you want to delete this post?"
-        }
-        confirmLabel="Delete Post"
+        message="Are you sure you want to delete this forum post?"
+        confirmLabel={submitting ? "Deleting..." : "Delete Post"}
       />
     </>
   );
