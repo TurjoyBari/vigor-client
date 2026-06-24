@@ -25,6 +25,10 @@ const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
 );
 
+function isUserBlocked(user) {
+  return user?.status === "blocked" || user?.isBlocked === true;
+}
+
 function formatPrice(price) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -41,13 +45,24 @@ export default function PaymentPage() {
   const [classItem, setClassItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [userBlocked, setUserBlocked] = useState(false);
 
   const loadCheckoutData = useCallback(async () => {
     if (!classId || !session?.user) return;
 
     setLoading(true);
     try {
-      await syncBackendToken(session.user);
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user;
+
+      console.log("User status:", vigorUser?.status);
+
+      if (isUserBlocked(vigorUser)) {
+        setUserBlocked(true);
+        toast.error("Action restricted by Admin");
+        router.replace(`/classes/${classId}`);
+        return;
+      }
 
       const bookingCheck = await publicApi.bookings.check(classId);
       if (unwrap(bookingCheck)?.booked) {
@@ -78,9 +93,22 @@ export default function PaymentPage() {
   const handleStripePayment = async () => {
     if (!classId || !session?.user) return;
 
+    if (userBlocked) {
+      toast.error("Action restricted by Admin");
+      return;
+    }
+
     setProcessing(true);
     try {
-      await syncBackendToken(session.user);
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user;
+
+      if (isUserBlocked(vigorUser)) {
+        setUserBlocked(true);
+        toast.error("Action restricted by Admin");
+        router.replace(`/classes/${classId}`);
+        return;
+      }
 
       console.log("Creating Stripe session");
 
@@ -105,6 +133,14 @@ export default function PaymentPage() {
         throw new Error(result.error.message);
       }
     } catch (error) {
+      console.log(error.response);
+
+      if (error?.response?.status === 403) {
+        toast.error("Action restricted by Admin");
+        router.replace(`/classes/${classId}`);
+        return;
+      }
+
       toast.error(error?.message || "Failed to start checkout. Please try again.");
     } finally {
       setProcessing(false);
@@ -206,8 +242,12 @@ export default function PaymentPage() {
             <button
               type="button"
               onClick={handleStripePayment}
-              disabled={processing}
-              className={cn(dashboardClasses.btnPrimary, "w-full py-4")}
+              disabled={processing || userBlocked}
+              className={cn(
+                dashboardClasses.btnPrimary,
+                "w-full py-4",
+                userBlocked && "opacity-60 cursor-not-allowed"
+              )}
             >
               <Icon icon={CreditCard} size={18} />
               {processing ? "Redirecting to Stripe..." : `Pay ${formatPrice(classItem.price)}`}

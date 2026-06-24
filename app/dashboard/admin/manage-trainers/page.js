@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import { ArrowDown } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
+import { useSession } from "@/lib/auth-client";
+import { adminApi } from "@/lib/dashboard/api";
+import { syncBackendToken, unwrap } from "@/lib/publicApi";
 import DataTable from "@/components/dashboard/ui/DataTable";
 import Badge from "@/components/dashboard/ui/Badge";
 import ConfirmationDialog from "@/components/dashboard/ui/ConfirmationDialog";
@@ -15,99 +19,157 @@ import {
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-const INITIAL_TRAINERS = [
-  {
-    id: "t-1",
-    name: "Sarah Chen",
-    email: "sarah@example.com",
-    specialty: "Yoga",
-    classCount: 6,
-  },
-  {
-    id: "t-2",
-    name: "Marcus Reed",
-    email: "marcus@example.com",
-    specialty: "HIIT, Strength Training",
-    classCount: 8,
-  },
-  {
-    id: "t-3",
-    name: "Emily Torres",
-    email: "emily@example.com",
-    specialty: "Cycling",
-    classCount: 4,
-  },
-  {
-    id: "t-4",
-    name: "Alex Johnson",
-    email: "alex.trainer@example.com",
-    specialty: "CrossFit",
-    classCount: 5,
-  },
-];
+function mapTrainer(user) {
+  const status =
+    user.status === "blocked" || user.isBlocked ? "blocked" : "active";
 
-async function fetchTrainers() {
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  return INITIAL_TRAINERS;
+  return {
+    id: user.id,
+    name: user.name || "Unknown",
+    email: user.email || "",
+    image: user.image || null,
+    role: user.role || "trainer",
+    status,
+    trainerApplicationStatus: user.trainerApplicationStatus || null,
+  };
 }
 
-async function demoteTrainer(id) {
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  return { success: true, id, role: "user" };
+function TrainerAvatar({ src, name }) {
+  const isLocal = src?.startsWith("/");
+  const label = name || "Trainer";
+
+  if (isLocal && src) {
+    return (
+      <Image
+        src={src}
+        alt={label}
+        width={48}
+        height={48}
+        className="h-12 w-12 rounded-full object-cover border border-primary-container/20"
+      />
+    );
+  }
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={label}
+        className="h-12 w-12 rounded-full object-cover border border-primary-container/20"
+      />
+    );
+  }
+
+  return (
+    <div className="h-12 w-12 rounded-full bg-primary-container/20 border border-primary-container/20 flex items-center justify-center text-sm font-semibold text-on-surface-variant">
+      {label.charAt(0).toUpperCase()}
+    </div>
+  );
 }
 
 export default function AdminManageTrainersPage() {
+  const { data: session, isPending: sessionPending } = useSession();
   const [loading, setLoading] = useState(true);
   const [trainers, setTrainers] = useState([]);
   const [demoteTarget, setDemoteTarget] = useState(null);
   const [demoteOpen, setDemoteOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
+  const fetchTrainers = useCallback(async () => {
+    if (!session?.user) {
+      if (!sessionPending) {
+        setTrainers([]);
+        setLoading(false);
+      }
+      return;
+    }
 
-    fetchTrainers()
-      .then((data) => {
-        if (mounted) setTrainers(data);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
+    setLoading(true);
+    try {
+      await syncBackendToken(session.user);
+
+      const response = await adminApi.getTrainers();
+      const data = unwrap(response);
+      const trainersFromDb = (data?.trainers || []).map(mapTrainer);
+
+      console.log("Trainers from users collection:", trainersFromDb);
+      trainersFromDb.forEach((trainer) => {
+        console.log("Trainer role:", trainer.role);
       });
 
-    return () => {
-      mounted = false;
-    };
-  }, []);
+      setTrainers(trainersFromDb);
+    } catch (error) {
+      console.error("Failed to load trainers:", error);
+      console.log(error.response);
+      setTrainers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user, sessionPending]);
+
+  useEffect(() => {
+    fetchTrainers();
+  }, [fetchTrainers]);
+
+  const closeDemoteDialog = () => {
+    setDemoteOpen(false);
+    setDemoteTarget(null);
+    setSubmitting(false);
+  };
 
   const handleDemoteConfirm = async () => {
     if (!demoteTarget) return;
 
-    await demoteTrainer(demoteTarget.id);
-    setTrainers((prev) => prev.filter((t) => t.id !== demoteTarget.id));
-    toast.success(`${demoteTarget.name} has been demoted to user.`);
+    setSubmitting(true);
+    try {
+      if (session?.user) {
+        await syncBackendToken(session.user);
+      }
+
+      console.log("Trainer role:", demoteTarget.role);
+
+      const response = await adminApi.demoteTrainer(demoteTarget.id);
+      const data = unwrap(response);
+      const demoted = mapTrainer(data?.trainer || {});
+
+      console.log("Demotion result:", demoted);
+
+      setTrainers((prev) => prev.filter((t) => t.id !== demoteTarget.id));
+      toast.success("Trainer demoted to user successfully");
+      closeDemoteDialog();
+    } catch (error) {
+      console.error("Demote trainer failed:", error);
+      console.log(error.response);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const columns = useMemo(
     () => [
       {
+        key: "image",
+        label: "Profile",
+        render: (row) => <TrainerAvatar src={row.image} name={row.name} />,
+      },
+      {
         key: "name",
-        label: "Trainer Name",
+        label: "Name",
         render: (row) => (
           <span className="font-semibold text-white">{row.name}</span>
         ),
       },
       { key: "email", label: "Email" },
       {
-        key: "specialty",
-        label: "Specialty",
-        render: (row) => <Badge variant="secondary">{row.specialty}</Badge>,
+        key: "role",
+        label: "Role",
+        render: (row) => <Badge role={row.role} size="sm" />,
       },
       {
-        key: "classCount",
-        label: "Classes",
+        key: "status",
+        label: "Status",
         render: (row) => (
-          <span className="font-geist-label text-sm font-bold text-white">
-            {row.classCount}
-          </span>
+          <Badge status={row.status === "blocked" ? "blocked" : "active"} />
         ),
       },
       {
@@ -146,7 +208,7 @@ export default function AdminManageTrainersPage() {
         <header>
           <h2 className={dashboardClasses.pageTitle}>Manage Trainers</h2>
           <p className={dashboardClasses.pageSubtitle}>
-            View active trainers and demote accounts back to standard user role.
+            Trainers are loaded from the MongoDB users collection (role: trainer).
           </p>
         </header>
 
@@ -155,26 +217,19 @@ export default function AdminManageTrainersPage() {
           data={trainers}
           emptyPreset="default"
           emptyTitle="No trainers found"
-          emptyDescription="There are no active trainers on the platform."
+          emptyDescription="There are no users with role trainer on the platform."
           rowKey="id"
         />
       </motion.div>
 
       <ConfirmationDialog
         isOpen={demoteOpen}
-        onClose={() => {
-          setDemoteOpen(false);
-          setDemoteTarget(null);
-        }}
+        onClose={closeDemoteDialog}
         onConfirm={handleDemoteConfirm}
         variant="warning"
         title="Demote to user?"
-        message={
-          demoteTarget
-            ? `Demote ${demoteTarget.name} (${demoteTarget.email}) from trainer to user? They will lose trainer dashboard access and class management privileges.`
-            : "Are you sure you want to demote this trainer?"
-        }
-        confirmLabel="Demote to User"
+        message="Are you sure you want to remove trainer privileges?"
+        confirmLabel={submitting ? "Demoting..." : "Demote to User"}
       />
     </>
   );

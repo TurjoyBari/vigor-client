@@ -31,12 +31,6 @@ export default function RoleGuard({
       return;
     }
 
-    if (user.isBlocked) {
-      toast.error("Your account has been blocked. Contact support.");
-      router.replace("/");
-      return;
-    }
-
     if (!canAccessDashboardRoute(role, pathname)) {
       toast.error("You do not have permission to access that page.");
       router.replace(getRoleDashboardPath(role));
@@ -54,10 +48,6 @@ export default function RoleGuard({
   }
 
   if (!user) {
-    return fallback || <LoadingSkeleton variant="page" />;
-  }
-
-  if (user.isBlocked) {
     return fallback || <LoadingSkeleton variant="page" />;
   }
 

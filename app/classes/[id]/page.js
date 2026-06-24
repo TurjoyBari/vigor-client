@@ -24,7 +24,9 @@ import {
   DASHBOARD_ANIMATION,
 } from "@/lib/dashboard/theme";
 
-const PLACEHOLDER_IMAGE = "/images/hero-strongest.png";
+function isUserBlocked(user) {
+  return user?.status === "blocked" || user?.isBlocked === true;
+}
 
 function formatPrice(price) {
   return new Intl.NumberFormat("en-US", {
@@ -82,6 +84,7 @@ export default function ClassDetailsPage() {
   const [favoriteId, setFavoriteId] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [authReady, setAuthReady] = useState(false);
+  const [userBlocked, setUserBlocked] = useState(false);
 
   const loadClass = useCallback(async () => {
     if (!classId) return;
@@ -99,12 +102,19 @@ export default function ClassDetailsPage() {
 
   const loadUserStatus = useCallback(async () => {
     if (!session?.user || !classId) {
+      setUserBlocked(false);
       setAuthReady(true);
       return;
     }
 
     try {
-      await syncBackendToken(session.user);
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user;
+
+      console.log("User status:", vigorUser?.status);
+
+      setUserBlocked(isUserBlocked(vigorUser));
+
       const [bookingRes, favoriteRes] = await Promise.all([
         publicApi.bookings.check(classId),
         publicApi.favorites.check(classId),
@@ -140,6 +150,11 @@ export default function ClassDetailsPage() {
   const handleBookNow = async () => {
     if (!requireAuth()) return;
 
+    if (userBlocked) {
+      toast.error("Action restricted by Admin");
+      return;
+    }
+
     if (booked) {
       toast.error("You have already booked this class");
       return;
@@ -147,7 +162,15 @@ export default function ClassDetailsPage() {
 
     setActionLoading(true);
     try {
-      await syncBackendToken(session.user);
+      const authData = await syncBackendToken(session.user);
+      const vigorUser = authData?.user;
+
+      if (isUserBlocked(vigorUser)) {
+        setUserBlocked(true);
+        toast.error("Action restricted by Admin");
+        return;
+      }
+
       const checkRes = await publicApi.bookings.check(classId);
       const checkData = unwrap(checkRes);
 
@@ -320,14 +343,18 @@ export default function ClassDetailsPage() {
                 <button
                   type="button"
                   onClick={handleBookNow}
-                  disabled={actionLoading || !authReady || booked}
+                  disabled={actionLoading || !authReady || booked || userBlocked}
                   className={cn(
                     dashboardClasses.btnPrimary,
                     "flex-1",
-                    booked && "opacity-60 cursor-not-allowed"
+                    (booked || userBlocked) && "opacity-60 cursor-not-allowed"
                   )}
                 >
-                  {booked ? "Already Booked" : "Book Now"}
+                  {booked
+                    ? "Already Booked"
+                    : userBlocked
+                      ? "Booking Restricted"
+                      : "Book Now"}
                 </button>
 
                 <button
