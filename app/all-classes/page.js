@@ -57,7 +57,7 @@ export default function AllClassesPage() {
   const fetchClasses = useCallback(async () => {
     setLoading(true);
 
-    console.log(search, selectedCategories, currentPage);
+    // console.log(search, selectedCategories, currentPage);
 
     try {
       const params = {

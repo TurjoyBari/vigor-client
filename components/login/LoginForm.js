@@ -4,11 +4,18 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, Input } from "@heroui/react";
+import { Button } from "@heroui/react";
 import { Envelope, Lock, Eye, EyeSlash, ArrowRight } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import GoogleIcon from "./GoogleIcon";
-import { signIn } from "@/lib/auth-client";
+import {
+  signIn,
+  signUp,
+  authClient,
+  getAuthUserFromResult,
+  getAuthErrorMessage,
+} from "@/lib/auth-client";
+import { syncBackendToken, setAuthUser } from "@/lib/publicApi";
 import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
 
@@ -16,9 +23,9 @@ const LOGO_IMAGE =
   "https://lh3.googleusercontent.com/aida/AP1WRLsa8lsZMsP7-3wJ5w20PwFIaHHIGF2OFs-itquo_S9XLclfKE7rP9-4b1t4-4IiW4PAETKHAWi-L-9YpWO9vQATetII1uuQV6wXmj5TEoerRpse8iIhcoxdy2WUX7adf_gnp93q_E9AwwN08gweI5gaOauskdSmIPSf9W9c_W9btdUOsO2iC-GgrL2RyZ6kl_Rl5hmpQLgGUHotz4t0HowIGQ1rq7n7ay38ofK5vQnAHLUzseNu7qoj2A";
 
 const DEMO_ACCOUNTS = {
-  Admin: { email: "admin@vigor.com", password: "admin@123" },
-  Trainer: { email: "trainer@vigor.com", password: "trainer@123" },
-  User: { email: "user@vigor.com", password: "user@123" },
+  Admin: { email: "admin@vigor.com", password: "Admin@123" },
+  Trainer: { email: "trainer@vigor.com", password: "Trainer@123" },
+  User: { email: "user@vigor.com", password: "User@123" },
 };
 
 function FieldIcon({ icon, focused }) {
@@ -33,10 +40,17 @@ function FieldIcon({ icon, focused }) {
   );
 }
 
+const DEMO_ROLE_MAP = {
+  Admin: "admin",
+  Trainer: "trainer",
+  User: "user",
+};
+
 export default function LoginForm() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
+  const [demoLoading, setDemoLoading] = useState(null);
 
 
   const {
@@ -53,21 +67,95 @@ export default function LoginForm() {
   const inputClassName =
     "login-input w-full bg-surface-container-low border border-primary-container/20 rounded-xl py-4 pl-12 text-on-surface placeholder:text-outline snappy-transition";
 
-  const handleDemoLogin = async (role) => {
-    const account = DEMO_ACCOUNTS[role];
+  const completeLogin = async (signedInUser) => {
+    let user = signedInUser;
+
+    if (!user) {
+      try {
+        const session = await authClient.getSession();
+        user = session?.data?.user;
+      } catch (error) {
+        console.error("Session fetch after login failed:", error);
+      }
+    }
+
+    if (!user) {
+      toast.error(
+        "Login succeeded but session was not saved. Clear cookies and try again."
+      );
+      return;
+    }
+
+    setAuthUser(user);
     try {
-      const result = await signIn.email({
+      await syncBackendToken(user);
+    } catch (error) {
+      console.error("Backend sync after login failed:", error);
+    }
+
+    toast.success("Sign in successfully! Welcome to VIGOR.");
+    setTimeout(() => router.push("/"), 1500);
+  };
+
+  const signInDemoAccount = async (role) => {
+    const account = DEMO_ACCOUNTS[role];
+    if (!account) return { error: { message: "Unknown demo role" } };
+
+    let result = await signIn.email({
       email: account.email.trim(),
       password: account.password,
     });
-    if (result.error) {
-      toast.error(result.error.message || "Sign in failed. Please try again.");
-      return;
+
+    const invalidCredentials =
+      result.error &&
+      /invalid|not found|credentials|password|email/i.test(
+        result.error.message || ""
+      );
+
+    if (invalidCredentials && role !== "Admin") {
+      const signUpResult = await signUp.email({
+        email: account.email.trim(),
+        password: account.password,
+        name: `Demo ${role}`,
+        role: DEMO_ROLE_MAP[role] || "user",
+      });
+
+      if (!signUpResult.error) {
+        result = await signIn.email({
+          email: account.email.trim(),
+          password: account.password,
+        });
+      }
     }
-    toast.success("Sign in successfully! Welcome to VIGOR.");
-    setTimeout(() => router.push("/"), 1500);
-    } catch {
-      toast.error("Sign in failed. Please try again.");
+
+    return result;
+  };
+
+  const handleDemoLogin = async (role) => {
+    if (demoLoading) return;
+
+    setDemoLoading(role);
+    try {
+      const result = await signInDemoAccount(role);
+
+      if (result.error) {
+        toast.error(
+          getAuthErrorMessage(
+            result.error,
+            role === "Admin"
+              ? "Demo admin account not found. Register admin@vigor.com first."
+              : "Demo sign in failed. Please try again."
+          )
+        );
+        return;
+      }
+
+      await completeLogin(getAuthUserFromResult(result));
+    } catch (error) {
+      console.error("Demo login error:", error);
+      toast.error(getAuthErrorMessage(error));
+    } finally {
+      setDemoLoading(null);
     }
   };
 
@@ -128,14 +216,14 @@ export default function LoginForm() {
 
 
       if (result.error) {
-        toast.error(result.error.message || "Sign in failed. Please try again.");
+        toast.error(getAuthErrorMessage(result.error));
         return;
       }
 
-      toast.success("Sign in successfully! Welcome to VIGOR.");
-      setTimeout(() => router.push("/"), 1500);
-    } catch {
-      toast.error("Sign in failed. Please try again.");
+      await completeLogin(getAuthUserFromResult(result));
+    } catch (error) {
+      console.error("Login error:", error);
+      toast.error(getAuthErrorMessage(error));
     }
   };
 
@@ -185,20 +273,21 @@ export default function LoginForm() {
               key={role}
               type="button"
               variant="secondary"
+              isDisabled={Boolean(demoLoading)}
               onPress={() => handleDemoLogin(role)}
               className="px-4 py-2 h-auto bg-surface-container rounded-lg font-geist-label text-label-bold text-on-surface-variant border border-primary-container/20 hover:bg-primary-container/15 hover:text-primary hover:border-secondary/40"
             >
-              {role}
+              {demoLoading === role ? "Signing in..." : role}
             </Button>
           ))}
         </div>
       </div>
 
-      <form className="space-y-6" onSubmit={handleSubmit(onSubmit) || handleDemoLogin(role)}>
+      <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
         <div>
           <div className="relative group">
             <FieldIcon icon={Envelope} focused={focusedField === "email"} />
-            <Input
+            <input
               id="email"
               type="email"
               placeholder="you@example.com"
@@ -238,7 +327,7 @@ export default function LoginForm() {
           </div>
           <div className="relative group">
             <FieldIcon icon={Lock} focused={focusedField === "password"} />
-            <Input
+            <input
               {...register("password", {
                 required: "Password is required",
               })}

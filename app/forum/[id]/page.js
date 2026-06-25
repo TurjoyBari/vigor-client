@@ -22,7 +22,7 @@ import {
 import Icon from "@/components/Icon";
 import Badge from "@/components/dashboard/ui/Badge";
 import { useSession } from "@/lib/auth-client";
-import publicApi, { syncBackendToken, unwrap } from "@/lib/publicApi";
+import publicApi, { ensureBackendAuth, syncBackendToken, unwrap } from "@/lib/publicApi";
 import {
   cn,
   dashboardClasses,
@@ -305,7 +305,7 @@ export default function ForumPostPage() {
     if (!requireAuth()) return;
     setActionLoading(true);
     try {
-      await syncBackendToken(session.user);
+      await ensureBackendAuth(session.user);
       await action();
     } catch (error) {
       const message =

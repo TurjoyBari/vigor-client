@@ -43,7 +43,7 @@ export default function EliteTrainingLabs() {
       <div className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop relative z-10">
         <motion.header
           className="mb-10 md:mb-12"
-          initial={DASHBOARD_ANIMATION.fadeIn.initial}
+          initial={false}
           animate={DASHBOARD_ANIMATION.fadeIn.animate}
           transition={DASHBOARD_ANIMATION.fadeIn.transition}
         >
@@ -109,7 +109,7 @@ export default function EliteTrainingLabs() {
 
         <motion.div
           className="flex justify-center mt-10 md:mt-12"
-          initial={DASHBOARD_ANIMATION.fadeIn.initial}
+          initial={false}
           animate={DASHBOARD_ANIMATION.fadeIn.animate}
           transition={{ ...DASHBOARD_ANIMATION.fadeIn.transition, delay: 0.1 }}
         >

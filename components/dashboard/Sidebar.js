@@ -7,11 +7,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowRightFromSquare,
+  House,
   Xmark,
 } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import Badge from "@/components/dashboard/ui/Badge";
 import { authClient } from "@/lib/auth-client";
+import { logoutBackend } from "@/lib/dashboard/api";
 import {
   SIDEBAR_NAV,
   ROLE_LABELS,
@@ -87,6 +89,7 @@ export default function Sidebar({
   const navItems = SIDEBAR_NAV[role] || SIDEBAR_NAV.user;
 
   const handleLogout = async () => {
+    await logoutBackend();
     await authClient.signOut();
     router.push("/");
   };
@@ -117,11 +120,9 @@ export default function Sidebar({
 
           {!collapsed && (
             <div className="min-w-0">
-              <Link href = "/">
-                <span className="font-anybody text-lg font-black italic text-primary uppercase tracking-tight">
-                  VIGOR
-                </span>
-              </Link>
+              <span className="font-anybody text-lg font-black italic text-primary uppercase tracking-tight">
+                VIGOR
+              </span>
               <p className="font-hanken text-[11px] text-on-surface-variant truncate">
                 {ROLE_LABELS[role]} Dashboard
               </p>
@@ -196,6 +197,24 @@ export default function Sidebar({
             )}
           </button>
         )}
+
+        <Link
+          href="/"
+          onClick={handleNavigate}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-on-surface-variant",
+            "hover:text-white hover:bg-primary-container/10 border border-transparent hover:border-primary-container/20 transition-all duration-200",
+            collapsed ? "justify-center" : "justify-start"
+          )}
+          title={collapsed ? "Go to Homepage" : undefined}
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-container/15 text-primary">
+            <Icon icon={House} size={18} />
+          </span>
+          {!collapsed && (
+            <span className="font-geist-label text-label-bold">Go to Homepage</span>
+          )}
+        </Link>
 
         <button
           type="button"

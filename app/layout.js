@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import ToastProvider from "@/components/ToastProvider";
 import ConditionalSiteLayout from "@/components/ConditionalSiteLayout";
+import BackendAuthSync from "@/components/BackendAuthSync";
 
 const anybody = Anybody({
   variable: "--font-anybody-family",
@@ -35,6 +36,7 @@ export default function RootLayout({ children }) {
       suppressHydrationWarning
     >
       <body className="selection:bg-primary-container selection:text-on-primary-container">
+        <BackendAuthSync />
         <ConditionalSiteLayout>{children}</ConditionalSiteLayout>
         <ToastProvider />
       </body>

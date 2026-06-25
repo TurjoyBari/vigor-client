@@ -9,7 +9,8 @@ import Icon from "@/components/Icon";
 import { useSession } from "@/lib/auth-client";
 import { useVigorRole } from "@/lib/hooks/useVigorRole";
 import { adminApi } from "@/lib/dashboard/api";
-import { syncBackendToken, unwrap } from "@/lib/publicApi";
+import { ensureBackendAuth, unwrap } from "@/lib/publicApi";
+import { getBackendToken } from "@/lib/dashboard/api";
 import DataTable from "@/components/dashboard/ui/DataTable";
 import Badge from "@/components/dashboard/ui/Badge";
 import ConfirmationDialog from "@/components/dashboard/ui/ConfirmationDialog";
@@ -96,7 +97,9 @@ export default function AdminManageUsersPage() {
 
     setLoading(true);
     try {
-      await syncBackendToken(session.user);
+      if (!getBackendToken()) {
+        await ensureBackendAuth(session.user);
+      }
 
       const response = await adminApi.getUsers();
       const data = unwrap(response);
@@ -107,7 +110,10 @@ export default function AdminManageUsersPage() {
       setUsers(usersFromDb);
     } catch (error) {
       console.error("Failed to load users:", error);
-      console.log(error.response);
+      toast.error(
+        error?.response?.data?.message ||
+          "Failed to load users from database. Please try again."
+      );
       setUsers([]);
     } finally {
       setLoading(false);
@@ -136,8 +142,8 @@ export default function AdminManageUsersPage() {
 
     setSubmitting(true);
     try {
-      if (session?.user) {
-        await syncBackendToken(session.user);
+      if (session?.user && !getBackendToken()) {
+        await ensureBackendAuth(session.user);
       }
 
       if (confirmAction === "block") {
@@ -307,7 +313,7 @@ export default function AdminManageUsersPage() {
         <header>
           <h2 className={dashboardClasses.pageTitle}>Manage Users</h2>
           <p className={dashboardClasses.pageSubtitle}>
-            View, block, unblock, and manage user roles across the platform.
+            All registered accounts from the database — synced from login and sign-up.
           </p>
         </header>
 

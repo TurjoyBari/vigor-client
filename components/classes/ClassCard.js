@@ -68,7 +68,7 @@ export default function ClassCard({ classItem, index = 0 }) {
         dashboardClasses.glassCardHover,
         "overflow-hidden group flex flex-col"
       )}
-      initial={DASHBOARD_ANIMATION.fadeIn.initial}
+      initial={false}
       animate={DASHBOARD_ANIMATION.fadeIn.animate}
       transition={{ ...DASHBOARD_ANIMATION.fadeIn.transition, delay: index * 0.06 }}
       whileHover={{ y: -4 }}

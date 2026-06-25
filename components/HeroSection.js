@@ -42,8 +42,9 @@ const FLOAT_STATS = [
   },
 ];
 
+/** Visible on first paint even if JS hydration is delayed */
 const fadeUp = {
-  initial: { opacity: 0, y: 28 },
+  initial: false,
   animate: { opacity: 1, y: 0 },
 };
 
@@ -150,7 +151,7 @@ export default function HeroSection() {
 
           {/* Hero visual */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.94, x: 24 }}
+            initial={false}
             animate={{ opacity: 1, scale: 1, x: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="lg:col-span-7 flex justify-center lg:justify-end"
@@ -182,7 +183,7 @@ export default function HeroSection() {
                     {FLOAT_STATS.map((item) => (
                       <motion.div
                         key={item.label}
-                        initial={{ opacity: 0, x: -16 }}
+                        initial={false}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: item.delay, duration: 0.45 }}
                         className={`glass-card px-4 py-3 rounded-xl flex items-center gap-3 w-fit max-w-full ${item.glow}`}

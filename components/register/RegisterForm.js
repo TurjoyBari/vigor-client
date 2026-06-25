@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, Checkbox, Input, Label } from "@heroui/react";
+import { Button, Label } from "@heroui/react";
 import {
   Person,
   Envelope,
@@ -15,7 +15,8 @@ import {
 } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import GoogleIcon from "../login/GoogleIcon";
-import { signUp, signIn } from "@/lib/auth-client";
+import { signUp, signIn, getAuthUserFromResult, getAuthErrorMessage } from "@/lib/auth-client";
+import { syncBackendToken, setAuthUser } from "@/lib/publicApi";
 import { useForm } from "react-hook-form";
 import { toast } from "react-toastify";
 import { uploadImage } from "@/utils/uploadImage";
@@ -37,7 +38,6 @@ function FieldIcon({ icon, focused }) {
 export default function RegisterForm() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
   const [focusedField, setFocusedField] = useState(null);
 
@@ -91,29 +91,50 @@ export default function RegisterForm() {
     }
 
 
-    const imageFile = data.image[0];
-        const imageUrl = await uploadImage(imageFile)
-        // console.log(imageUrl);
+    let imageUrl;
+    const imageFile = data.image?.[0];
+    if (imageFile) {
+      imageUrl = await uploadImage(imageFile);
+      if (!imageUrl) {
+        toast.error("Image upload failed. Try again or register without a photo.");
+        return;
+      }
+    }
 
     try {
-      const result = await signUp.email({
+      const payload = {
         email: data.email.trim(),
         password: data.password,
         name: data.fullName.trim(),
         role: data.role,
-        image: imageUrl || undefined,
-      });
+      };
 
+      if (imageUrl) {
+        payload.image = imageUrl;
+      }
+
+      const result = await signUp.email(payload);
 
       if (result.error) {
-        toast.error(result.error.message || "Registration failed. Please try again.");
+        toast.error(getAuthErrorMessage(result.error, "Registration failed. Please try again."));
         return;
+      }
+
+      const user = getAuthUserFromResult(result);
+      if (user) {
+        setAuthUser(user);
+        try {
+          await syncBackendToken(user);
+        } catch (error) {
+          console.error("Backend sync after registration failed:", error);
+        }
       }
 
       toast.success("Account created successfully! Welcome to VIGOR.");
       setTimeout(() => router.push("/"), 1500);
-    } catch {
-      toast.error("Registration failed. Please try again.");
+    } catch (error) {
+      console.error("Registration error:", error);
+      toast.error(getAuthErrorMessage(error, "Registration failed. Please try again."));
     }
   };
 
@@ -153,7 +174,7 @@ export default function RegisterForm() {
             </label>
             <div className="relative">
               <FieldIcon icon={Person} focused={focusedField === "fullName"} />
-              <Input
+              <input
                 id="fullName"
                 type="text"
                 placeholder="Alex Johnson"
@@ -196,7 +217,7 @@ export default function RegisterForm() {
             </label>
             <div className="relative">
               <FieldIcon icon={Envelope} focused={focusedField === "email"} />
-              <Input
+              <input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
@@ -256,9 +277,7 @@ export default function RegisterForm() {
             </label>
             <div className="group relative cursor-pointer">
               <input
-                {...register("image", {
-                  required: "Profile image is required",
-                })}
+                {...register("image")}
                 id="image"
                 name="image"                
                 type="file"
@@ -288,7 +307,7 @@ export default function RegisterForm() {
             </label>
             <div className="relative">
               <FieldIcon icon={Lock} focused={focusedField === "password"} />
-              <Input
+              <input
                 id="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"

@@ -9,6 +9,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { useEffect, useRef, useState } from "react";
 import { authClient, useSession } from "@/lib/auth-client";
+import { logoutBackend } from "@/lib/dashboard/api";
 
 
 export default function Navbar() {
@@ -31,6 +32,7 @@ export default function Navbar() {
   }, []);
 
   const handleLogout = async () => {
+    await logoutBackend();
     await authClient.signOut();
     router.push("/");
   };
@@ -38,52 +40,6 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 w-full z-50 backdrop-blur-xl border-b border-primary-container/30 bg-nav-bg/95 shadow-[0_4px_30px_rgba(124,58,237,0.15)]">
-      {/* <div className="flex justify-between items-center px-margin-mobile md:px-margin-desktop h-24 w-full max-w-container-max mx-auto">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="font-anybody text-headline-md font-black tracking-tighter text-primary italic"
-          >
-            VIGOR
-          </Link>
-        </div>
-
-        <div className="hidden md:flex items-center gap-10 absolute left-1/2 -translate-x-1/2">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`font-anybody text-label-bold uppercase tracking-[0.2em] transition-colors ${
-                link.active
-                  ? "text-primary border-b-2 border-primary-container pb-1"
-                  : "text-on-surface hover:text-primary"
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-4 md:gap-8">
-          <Button
-            isIconOnly
-            variant="secondary"
-            className="rounded-xl border border-primary-container/30 bg-primary-container/10 hover:bg-primary-container/20 min-w-10 h-10"
-            aria-label="Toggle theme"
-          >
-            <Icon icon={Sun} className="text-primary" size={20} />
-          </Button>
-          <Link
-            href="/login"
-            className="hidden sm:inline text-on-surface font-anybody text-label-bold uppercase tracking-widest hover:text-primary transition-colors"
-          >
-            Login
-          </Link>
-          <Button className="bg-primary-container hover:brightness-110 text-on-primary-container px-6 md:px-8 py-3 rounded-xl font-anybody text-label-bold uppercase tracking-widest shadow-[0_0_20px_rgba(124,58,237,0.4)]">
-            Register
-          </Button>
-        </div>
-      </div> */}
       <div className="max-w-7xl mx-auto flex items-center justify-between px-margin-mobile md:px-margin-desktop h-24 w-full max-w-container-max">
         {/* LOGO */}
         <div className="flex items-center gap-3">
@@ -99,7 +55,6 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-10 absolute left-1/2 -translate-x-1/2">
           <Link
             href="/"
-            // className={`text-sm font-medium transition-colors ${pathname === "/" ? "text-pink-500 font-semibold" : "text-slate-300 hover:text-white"}`}
             className={`font-anybody text-label-bold uppercase tracking-[0.2em] transition-colors ${pathname === "/"
                 ? "text-primary border-b-2 border-primary-container pb-1"
                 : "text-on-surface hover:text-primary"
@@ -109,7 +64,6 @@ export default function Navbar() {
           </Link>
           <Link
             href="/all-classes"
-            // className={`text-sm font-medium transition-colors ${pathname.startsWith("/events") ? "text-pink-500 font-semibold" : "text-slate-300 hover:text-white"}`}
             className={`font-anybody text-label-bold uppercase tracking-[0.2em] transition-colors ${pathname.startsWith("/all-classes") || pathname.startsWith("/classes")
                 ? "text-primary border-b-2 border-primary-container pb-1"
                 : "text-on-surface hover:text-primary"
@@ -164,28 +118,6 @@ export default function Navbar() {
                 Sign Up
               </Link>
             </div>
-            
-
-
-        //     <div className="flex items-center gap-4 md:gap-8">
-        //   <Button
-        //     isIconOnly
-        //     variant="secondary"
-        //     className="rounded-xl border border-primary-container/30 bg-primary-container/10 hover:bg-primary-container/20 min-w-10 h-10"
-        //     aria-label="Toggle theme"
-        //   >
-        //     <Icon icon={Sun} className="text-primary" size={20} />
-        //   </Button>
-        //   <Link
-        //     href="/login"
-        //     className="hidden sm:inline text-on-surface font-anybody text-label-bold uppercase tracking-widest hover:text-primary transition-colors"
-        //   >
-        //     Login
-        //   </Link>
-        //   <Button className="bg-primary-container hover:brightness-110 text-on-primary-container px-6 md:px-8 py-3 rounded-xl font-anybody text-label-bold uppercase tracking-widest shadow-[0_0_20px_rgba(124,58,237,0.4)]">
-        //     Register
-        //   </Button>
-        // </div>
           )}
 
           {session && session?.user && (

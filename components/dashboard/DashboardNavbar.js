@@ -17,6 +17,7 @@ import {
 import Icon from "@/components/Icon";
 import Badge from "@/components/dashboard/ui/Badge";
 import { authClient } from "@/lib/auth-client";
+import { logoutBackend } from "@/lib/dashboard/api";
 import {
   getDashboardPageTitle,
   getRoleDashboardPath,
@@ -128,6 +129,7 @@ export default function DashboardNavbar({
   }, [isDark]);
 
   const handleLogout = async () => {
+    await logoutBackend();
     await authClient.signOut();
     router.push("/");
   };

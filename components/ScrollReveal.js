@@ -1,26 +1,32 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function ScrollReveal({ children, className = "" }) {
   const ref = useRef(null);
+  const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
-    el.classList.add("opacity-0", "translate-y-10");
+    const reveal = () => setRevealed(true);
+
+    const rect = el.getBoundingClientRect();
+    const inView = rect.top < window.innerHeight && rect.bottom > 0;
+    if (inView) {
+      reveal();
+      return;
+    }
 
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("opacity-100", "translate-y-0");
-            entry.target.classList.remove("opacity-0", "translate-y-10");
-          }
-        });
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          reveal();
+          observer.disconnect();
+        }
       },
-      { threshold: 0.1 },
+      { threshold: 0.08, rootMargin: "0px 0px -32px 0px" },
     );
 
     observer.observe(el);
@@ -30,7 +36,9 @@ export default function ScrollReveal({ children, className = "" }) {
   return (
     <div
       ref={ref}
-      className={`glass-card transition-all duration-700 ${className}`}
+      className={`glass-card transition-all duration-700 ease-out opacity-100 ${
+        revealed ? "translate-y-0" : "translate-y-6"
+      } ${className}`}
     >
       {children}
     </div>

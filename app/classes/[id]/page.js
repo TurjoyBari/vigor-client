@@ -17,7 +17,7 @@ import {
 } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import { useSession } from "@/lib/auth-client";
-import publicApi, { syncBackendToken, unwrap } from "@/lib/publicApi";
+import publicApi, { ensureBackendAuth, syncBackendToken, unwrap } from "@/lib/publicApi";
 import {
   cn,
   dashboardClasses,
@@ -108,10 +108,11 @@ export default function ClassDetailsPage() {
     }
 
     try {
+      await ensureBackendAuth(session.user);
       const authData = await syncBackendToken(session.user);
       const vigorUser = authData?.user;
 
-      console.log("User status:", vigorUser?.status);
+      // console.log("User status:", vigorUser?.status);
 
       setUserBlocked(isUserBlocked(vigorUser));
 
@@ -162,6 +163,7 @@ export default function ClassDetailsPage() {
 
     setActionLoading(true);
     try {
+      await ensureBackendAuth(session.user);
       const authData = await syncBackendToken(session.user);
       const vigorUser = authData?.user;
 
@@ -194,8 +196,8 @@ export default function ClassDetailsPage() {
 
     setActionLoading(true);
     try {
-      const authData = await syncBackendToken(session.user);
-      const vigorUser = authData?.user || session.user;
+      await ensureBackendAuth(session.user);
+      const vigorUser = (await syncBackendToken(session.user))?.user || session.user;
 
       console.log("Current User:", vigorUser);
       console.log("Current Class:", classItem);
@@ -220,13 +222,21 @@ export default function ClassDetailsPage() {
       toast.success("Saved to favorites");
     } catch (error) {
       const status = error?.response?.status;
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Could not update favorites. Please try again.";
+
       if (status === 409) {
         setIsFavorite(true);
         const checkRes = await publicApi.favorites.check(classId);
         const checkData = unwrap(checkRes);
         setFavoriteId(checkData?.favoriteId || null);
         toast.info("Already in your favorites");
+        return;
       }
+
+      toast.error(message);
     } finally {
       setActionLoading(false);
     }

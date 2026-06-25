@@ -8,7 +8,7 @@ import { toast } from "react-toastify";
 import { GraduationCap, ArrowRight } from "@gravity-ui/icons";
 import Icon from "@/components/Icon";
 import { useSession } from "@/lib/auth-client";
-import publicApi, { syncBackendToken, unwrap } from "@/lib/publicApi";
+import publicApi, { ensureBackendAuth, syncBackendToken, unwrap } from "@/lib/publicApi";
 import {
   cn,
   dashboardClasses,
@@ -69,6 +69,7 @@ export default function ApplyTrainerPage() {
 
     setSubmitting(true);
     try {
+      await ensureBackendAuth(session.user);
       const authData = await syncBackendToken(session.user);
       const vigorUser = authData?.user || session.user;
 
