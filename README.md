@@ -213,5 +213,3 @@ Blocked users cannot:
 
 **Rafiul Bari Turjo**
 
-GitHub: Add GitHub URL
-LinkedIn: Add LinkedIn URL
