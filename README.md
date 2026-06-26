@@ -1,36 +1,217 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# VIGOR Client
 
-## Getting Started
+VIGOR is a modern full-stack Fitness & Gym Management Platform that helps users discover fitness classes, book sessions, interact with trainers, and engage in a community-driven fitness ecosystem.
 
-First, run the development server:
+This repository contains the **frontend (client-side)** application built with Next.js.
+
+---
+
+## Live Demo: https://vigor-client.vercel.app/
+
+
+---
+
+## Features
+<img width="1860" height="904" alt="image" src="https://github.com/user-attachments/assets/777c375b-4d0d-4ea4-bb2d-25330847a1e9" />
+<img width="1870" height="905" alt="image" src="https://github.com/user-attachments/assets/6cd88dfb-6a86-475d-9b1a-3e3cd4002da3" />
+<img width="1909" height="895" alt="image" src="https://github.com/user-attachments/assets/69b9b2cf-1f8f-4dae-8d29-14fd8f2886ee" />
+<img width="1895" height="909" alt="image" src="https://github.com/user-attachments/assets/2a6eab27-c5b4-4c6e-8d28-9911c0f6dfc4" />
+
+
+
+
+### Public Features
+
+* Modern responsive landing page
+* Browse all approved fitness classes
+* Search classes by name
+* Filter classes by category
+* View class details
+* Community forum
+* Login / Register authentication
+
+### User Features
+
+* Book fitness classes
+* Stripe payment integration
+* Save favorite classes
+* Apply as trainer
+* Manage booked classes
+* Dashboard overview
+
+### Trainer Features
+
+* Add fitness classes
+* Manage own classes
+* View enrolled students
+* Create forum posts
+* Manage forum posts
+
+### Admin Features
+
+* Manage users
+* Block / Unblock users
+* Promote users to admin
+* Approve / Reject trainer applications
+* Approve / Reject classes
+* Manage trainers
+* Moderate forum posts
+* View transactions
+
+---
+
+## Tech Stack
+
+### Frontend
+
+* Next.js
+* JavaScript
+* Tailwind CSS
+* HeroUI
+* Framer Motion
+* Gravity UI Icons
+
+### Authentication
+
+* Better Auth
+* JWT
+
+### Payment
+
+* Stripe
+
+### Database
+
+* MongoDB (via backend API)
+
+---
+
+## Project Structure
+
+```bash
+vigor-client/
+│
+├── app/
+├── components/
+├── hooks/
+├── services/
+├── utils/
+├── public/
+├── styles/
+└── package.json
+```
+
+---
+
+## Installation
+
+Clone repository:
+
+```bash
+git clone YOUR_CLIENT_REPO_URL
+```
+
+Go to project folder:
+
+```bash
+cd vigor-client
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create `.env.local`
 
-## Learn More
+```env
+NEXT_PUBLIC_API_URL=
+NEXT_PUBLIC_IMGBB_KEY=
+NEXT_PUBLIC_STRIPE_PK=
+NEXT_PUBLIC_APP_URL=
+```
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Available Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Key Functionalities
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Search Functionality
+
+Uses MongoDB `$regex` for searching classes by class name.
+
+### Filter Functionality
+
+Uses MongoDB `$in` to filter by category.
+
+### Role-Based Dashboard
+
+* User Dashboard
+* Trainer Dashboard
+* Admin Dashboard
+
+### Soft Block System
+
+Blocked users can:
+
+* Login
+* Browse classes
+* Read forum posts
+
+Blocked users cannot:
+
+* Book classes
+* Apply as trainer
+* Comment
+* Like/dislike posts
+
+---
+
+## UI Highlights
+
+* Premium SaaS UI
+* Responsive design
+* Modern dashboard
+* Smooth animations
+* Glassmorphism cards
+* Loading skeletons
+
+---
+
+## Future Improvements
+
+* Notifications
+* Email verification
+* Analytics dashboard improvements
+* Real-time chat
+* Mobile app
+
+---
+
+## Author
+
+**Rafiul Bari Turjo**
+
+GitHub: Add GitHub URL
+LinkedIn: Add LinkedIn URL
